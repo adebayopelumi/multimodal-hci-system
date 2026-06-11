@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# API keys — never commit these
+*_key.txt
+*.key.txt
+picovoice_key.txt
+
+# Node
+node_modules/
+ui/dist/
+
+# Electron build output
+electron/dist-app/
+electron/AppIcon.iconset/
+electron/icon_1024.png
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Runtime data
+voice_history.jsonl
+
+# Misc
+*.log

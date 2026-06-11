@@ -1,0 +1,22 @@
+openai-whisper
+SpeechRecognition
+pyaudio
+fastapi
+uvicorn
+pyttsx3
+numpy
+opencv-python
+requests
+pvporcupine
+rapidfuzz
+assemblyai
+openai
+rapidfuzz
+mediapipe
+
+# macOS only
+pyobjc-framework-Quartz; platform_system == "Darwin"
+
+# Windows only
+pyautogui; platform_system == "Windows"
+pywin32; platform_system == "Windows"

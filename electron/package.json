@@ -1,0 +1,56 @@
+{
+  "name": "capstone-electron",
+  "version": "1.0.0",
+  "description": "MHCI Assistant – Multimodal HCI",
+  "main": "main.js",
+  "scripts": {
+    "start": "cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
+    "dev": "electron .",
+    "build": "electron-builder --mac --dir",
+    "dist": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.capstone.assistant",
+    "productName": "MHCI Assistant",
+    "asar": false,
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "project_path.txt"
+    ],
+    "extraResources": [
+      {
+        "from": "../ui/dist",
+        "to": "ui/dist"
+      },
+      {
+        "from": "project_path.txt",
+        "to": "project_path.txt"
+      }
+    ],
+    "mac": {
+      "icon": "AppIcon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.4",
+    "electron-builder": "^26.15.2",
+    "electron-reloader": "^1.2.3"
+  }
+}
