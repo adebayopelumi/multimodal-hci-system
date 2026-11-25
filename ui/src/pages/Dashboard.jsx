@@ -578,6 +578,9 @@ useEffect(() => {
                 playsInline
                 muted
                 className="w-full h-full object-cover"
+                // Mirror the preview like a selfie camera, matching the gesture
+                // engine (it flips its frames too), so the image moves with your hand.
+                style={{ transform: "scaleX(-1)" }}
               />
             ) : (
               <div className="text-center">
