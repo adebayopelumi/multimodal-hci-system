@@ -53,10 +53,11 @@ const Dashboard = ({ onNavigate }) => {
     }));
   };
 
-  const [audioLevel, setAudioLevel] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const [micStream, setMicStream] = useState(null);
+  const micStreamRef = useRef(null);
+  const barsRef = useRef(null); // the level meter's bars (heights set directly, ~60 times a second)
   const [camStream, setCamStream] = useState(null);
   const camStreamRef = useRef(null);
 
@@ -70,16 +71,59 @@ const Dashboard = ({ onNavigate }) => {
   const voiceLive = isActive && isMicActive && mode !== "gesture";
   const gestureLive = isActive && isCameraActive && gestureEnabled && mode !== "voice";
 
-  // fake audio visualizer (still random for now)
+  // Live level meter: bars follow what the microphone actually hears.
+  // Louder sound = taller bars. Low pitches sit in the middle and higher
+  // ones spread outwards, mirrored on both sides.
   useEffect(() => {
-    if (voiceLive) {
-      const interval = setInterval(() => {
-        setAudioLevel(Math.random() * 100);
-      }, 100);
-      return () => clearInterval(interval);
-    }
-    setAudioLevel(0);
-  }, [voiceLive]);
+    const bars = barsRef.current ? Array.from(barsRef.current.children) : [];
+    if (!micStream || !voiceLive || !bars.length) return;
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    ctx.resume?.().catch(() => {});
+    const source = ctx.createMediaStreamSource(micStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.72;
+    analyser.minDecibels = -85; // quiet room stays near the floor
+    analyser.maxDecibels = -25; // normal speech reaches the top
+    source.connect(analyser); // analysed only, never played back
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const half = Math.floor(bars.length / 2);
+    const binHz = ctx.sampleRate / analyser.fftSize;
+    // Log-spaced bands across the speech range (90 Hz to 5 kHz)
+    const edges = Array.from({ length: half + 1 }, (_, k) =>
+      Math.max(1, Math.round((90 * Math.pow(5000 / 90, k / half)) / binHz)),
+    );
+
+    let frame;
+    const draw = () => {
+      analyser.getByteFrequencyData(data);
+      for (let k = 0; k < half; k++) {
+        let peak = 0;
+        for (let j = edges[k]; j < Math.max(edges[k + 1], edges[k] + 1); j++) {
+          if (data[j] > peak) peak = data[j];
+        }
+        // Higher bands carry less energy in speech; lift them a little so the edges move too
+        const level = Math.min(1, (peak / 255) * (1 + 0.6 * (k / half)));
+        const height = `${Math.max(6, Math.round(level * 100))}%`;
+        bars[half - 1 - k].style.height = height;
+        bars[half + k].style.height = height;
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      source.disconnect();
+      ctx.close().catch(() => {});
+      bars.forEach((b) => (b.style.height = "")); // back to the resting height
+    };
+  }, [micStream, voiceLive]);
 
   const stopAssistant = async () => {
     // UI first
@@ -166,31 +210,34 @@ const Dashboard = ({ onNavigate }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // MIC STREAM (logic same, just used for visualiser / future)
+  // MIC STREAM: open the microphone while voice is on (feeds the level meter)
   useEffect(() => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      return;
-    }
-
-    if (!isActive || !isMicActive || mode === "gesture") {
-      if (micStream) {
-        micStream.getTracks().forEach((t) => t.stop());
-        setMicStream(null);
-      }
+    if (!voiceLive || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return;
     }
 
     const constraints = {
-      audio: microphone && microphone !== "default" ? { deviceId: { exact: microphone } } : true,
+      audio: {
+        ...(microphone && microphone !== "default" ? { deviceId: { exact: microphone } } : {}),
+        // Raw levels, so the meter shows how loud the sound really is
+        // (auto gain would make quiet and loud speech look the same)
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
       video: false,
     };
+
+    let cancelled = false;
 
     navigator.mediaDevices
       .getUserMedia(constraints)
       .then((stream) => {
-        if (micStream) {
-          micStream.getTracks().forEach((t) => t.stop());
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
         }
+        micStreamRef.current = stream;
         setMicStream(stream);
         addLog("SYSTEM", "Microphone stream started", "mic_stream_on");
       })
@@ -199,13 +246,17 @@ const Dashboard = ({ onNavigate }) => {
         addLog("SYSTEM", "Microphone error / permission denied", "mic_error");
       });
 
+    // Turning voice off (or leaving the page) releases the microphone
     return () => {
-      if (micStream) {
-        micStream.getTracks().forEach((t) => t.stop());
+      cancelled = true;
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = null;
       }
+      setMicStream(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, isMicActive, mode, microphone]);
+  }, [voiceLive, microphone]);
 
   // CAMERA STREAM
   useEffect(() => {
@@ -381,20 +432,14 @@ const Dashboard = ({ onNavigate }) => {
           />
           <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
             <div
+              ref={barsRef}
               className="flex min-h-[96px] flex-1 items-center justify-center gap-[3px] overflow-hidden rounded-md border border-hairline-soft bg-canvas-soft px-4"
               aria-hidden="true"
             >
               {Array.from({ length: 56 }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-[3px] rounded-full transition-[height] duration-100 ${
-                    voiceLive ? "bg-ink/75" : "bg-hairline-strong"
-                  }`}
-                  style={{
-                    height: voiceLive
-                      ? `${Math.max(10, audioLevel * Math.abs(Math.sin((i + Date.now() / 100) * 0.5)))}%`
-                      : "6%",
-                  }}
+                  className={`h-[6%] w-[3px] rounded-full ${voiceLive ? "bg-ink/75" : "bg-hairline-strong"}`}
                 />
               ))}
             </div>
