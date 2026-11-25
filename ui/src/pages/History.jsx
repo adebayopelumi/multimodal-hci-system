@@ -1,56 +1,25 @@
 //history.jsx
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   History as HistoryIcon,
   Filter,
   Search,
   Trash2,
-  RefreshCw,
 } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
-
-const LOGS_KEY = "capstone-activity-log";
+import { useLogs } from "../contexts/LogsContext";
 
 const History = () => {
   const {
     recordAudio,
     saveSnapshots,
     autoStart,
-    clearLogs, // from SettingsContext
   } = useSettings();
 
-  const [logs, setLogs] = useState([]);
+  // Same live list as the Dashboard, so it's always up to date (no refresh needed)
+  const { logs, clearLogs } = useLogs();
   const [filterType, setFilterType] = useState("ALL");
   const [search, setSearch] = useState("");
-
-  // --- load logs from localStorage ---
-  const loadLogs = () => {
-    try {
-      const raw = localStorage.getItem(LOGS_KEY);
-      if (!raw) {
-        setLogs([]);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      setLogs(Array.isArray(parsed) ? parsed : []);
-    } catch (err) {
-      console.error("Failed to load logs", err);
-      setLogs([]);
-    }
-  };
-
-  useEffect(() => {
-    loadLogs();
-
-    // listen to changes from other tabs/components
-    const handleStorage = (e) => {
-      if (e.key === LOGS_KEY) {
-        loadLogs();
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
 
   // --- filtered logs ---
   const filteredLogs = logs.filter((log) => {
@@ -72,7 +41,6 @@ const History = () => {
 
   const handleClear = () => {
     clearLogs();
-    loadLogs();
   };
 
   return (
@@ -186,13 +154,6 @@ const History = () => {
                 className="w-full pl-7 pr-3 py-1.5 rounded-md bg-[#0d0b1e]/80 border border-[#3d3870] text-xs text-white placeholder:text-white0 focus:outline-none focus:border-violet-400"
               />
             </div>
-            <button
-              onClick={loadLogs}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-[#4c4888] bg-[#1e1b3a] px-3 py-1.5 text-[0.7rem] text-white hover:bg-[#2e2a5a]"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Refresh
-            </button>
             <button
               onClick={handleClear}
               className="inline-flex items-center justify-center gap-1 rounded-md border border-rose-500 bg-rose-500/10 px-3 py-1.5 text-[0.7rem] text-rose-200 hover:bg-rose-500/20"

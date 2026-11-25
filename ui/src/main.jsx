@@ -3,11 +3,14 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
 import { SettingsProvider } from "./contexts/SettingsContext";
+import { LogsProvider } from "./contexts/LogsContext";
 
 createRoot(document.getElementById("root")).render(
-  
+
     <SettingsProvider>
-      <App />
+      <LogsProvider>
+        <App />
+      </LogsProvider>
     </SettingsProvider>
   
 );

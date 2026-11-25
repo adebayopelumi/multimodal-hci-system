@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
+import { useLogs } from "../contexts/LogsContext";
 
 export default function Settings() {
   const {
@@ -11,9 +12,21 @@ export default function Settings() {
 
     startMode,
     setStartMode,
-
-    clearLogs,
   } = useSettings();
+
+  const { logs, clearLogs } = useLogs();
+  const [justCleared, setJustCleared] = useState(false);
+
+  useEffect(() => {
+    if (!justCleared) return;
+    const t = setTimeout(() => setJustCleared(false), 2000);
+    return () => clearTimeout(t);
+  }, [justCleared]);
+
+  const handleClearLogs = () => {
+    clearLogs();
+    setJustCleared(true);
+  };
 
   useEffect(() => {
     if (!window.api?.saveSettings) return;
@@ -99,12 +112,19 @@ export default function Settings() {
       <section className="bg-[#13112b]/80 border border-[#2e2a5a] rounded-xl p-4 md:p-5 mb-6">
         <h2 className="text-sm font-semibold text-white">Logs</h2>
 
-        <button
-          onClick={clearLogs}
-          className="mt-2 px-3 py-1 border border-red-500 text-red-300 rounded-md text-xs"
-        >
-          Clear activity logs
-        </button>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={handleClearLogs}
+            className="px-3 py-1 border border-red-500 text-red-300 rounded-md text-xs hover:bg-red-500/10"
+          >
+            Clear activity logs
+          </button>
+          <span className="text-[11px] text-violet-200">
+            {justCleared
+              ? "Logs cleared."
+              : `${logs.length} ${logs.length === 1 ? "entry" : "entries"} this session`}
+          </span>
+        </div>
       </section>
     </div>
   );

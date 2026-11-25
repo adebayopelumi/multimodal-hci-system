@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 const SETTINGS_KEY = "capstone-settings";
-const LOGS_KEY = "capstone-activity-log";
 
 const SettingsContext = createContext(null);
 
@@ -75,12 +74,6 @@ export function SettingsProvider({ children }) {
     else root.classList.remove("dark");
   }, [theme]);
 
-  // Clear logs
-  const clearLogs = () => {
-    localStorage.removeItem(LOGS_KEY);
-    console.log("Log storage cleared.");
-  };
-
   return (
     <SettingsContext.Provider
       value={{
@@ -98,7 +91,6 @@ export function SettingsProvider({ children }) {
         setRecordAudio,
         saveSnapshots,
         setSaveSnapshots,
-        clearLogs,
 
         // 🔹 NEW: shared dashboard state
         dashboardState,

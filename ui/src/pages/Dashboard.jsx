@@ -11,8 +11,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
-
-const LOGS_KEY = "capstone-activity-log";
+import { useLogs } from "../contexts/LogsContext";
 
 const Dashboard = () => {
     const {
@@ -96,59 +95,11 @@ const Dashboard = () => {
   // video element ref for real camera feed
   const videoRef = useRef(null);
 
-  const [activityLog, setActivityLog] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LOGS_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {
-      console.error("log parse error", e);
-    }
-    return [
-      {
-        id: 1,
-        type: "VOICE",
-        command: "open chrome",
-        intent: "open_chrome",
-        timestamp: "10:23:45",
-      },
-      {
-        id: 2,
-        type: "GESTURE",
-        command: "swipe_left",
-        intent: "go_back",
-        timestamp: "10:23:47",
-      },
-      {
-        id: 3,
-        type: "ACTION",
-        command: "Execution success",
-        intent: "",
-        timestamp: "10:23:48",
-      },
-    ];
-  });
+  // Shared, in-memory activity log (starts empty each launch; see LogsContext).
+  // LogsContext also records everything Python prints.
+  const { logs: activityLog, addLog } = useLogs();
 
-  // persist logs
-  useEffect(() => {
-    try {
-      localStorage.setItem(LOGS_KEY, JSON.stringify(activityLog));
-    } catch (e) {
-      console.error("log persist error", e);
-    }
-  }, [activityLog]);
-
-  const addLog = (type, command, intent) => {
-    const newLog = {
-      id: Date.now(),
-      type,
-      command,
-      intent,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setActivityLog((prev) => [newLog, ...prev].slice(0, 50));
-  };
-
-  // ✅ Receive logs from Python via Electron and push into UI log panel
+  // Update the gesture / voice panels from structured events Python prints as JSON
 useEffect(() => {
   if (!window.api || !window.api.onLog) return;
 
@@ -156,13 +107,6 @@ useEffect(() => {
     const msg = String(data?.message || "").trim();
     if (!msg) return;
 
-    addLog(
-      data.type === "stderr" ? "SYSTEM" : "ACTION",
-      msg,
-      data.type || ""
-    );
-
-    // If later you print JSON from python, this will auto-update panels
     try {
       const obj = JSON.parse(msg);
 
@@ -171,7 +115,6 @@ useEffect(() => {
           label: obj.label || "Unknown",
           confidence: Number(obj.confidence || 0),
         });
-        addLog("GESTURE", obj.label || "gesture", obj.intent || "");
       }
 
       if (obj.type === "VOICE") {
@@ -180,7 +123,6 @@ useEffect(() => {
           intent: obj.intent || "",
           confidence: Number(obj.confidence || 0),
         });
-        addLog("VOICE", obj.text || "voice", obj.intent || "");
       }
     } catch {}
   });
