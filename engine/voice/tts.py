@@ -23,6 +23,7 @@ import os
 import platform
 import queue
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -44,6 +45,11 @@ _kokoro_failed = False
 _load_lock = threading.Lock()
 _queue: "queue.Queue[str]" = queue.Queue()
 _worker: threading.Thread | None = None
+
+PLAYER_SCRIPT = Path(__file__).resolve().parent / "audio_player.py"
+_player: subprocess.Popen | None = None
+_player_lock = threading.Lock()
+_player_failures = 0  # (re)starts so far; reset once the player works
 
 
 def _lang_for(voice: str) -> str:
@@ -72,26 +78,119 @@ def _load_kokoro():
         return _kokoro
 
 
-def _play(samples: np.ndarray, sample_rate: int):
+def _prepare(samples: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Short fades (no clicks) and a little silence in front so the first word isn't clipped."""
+    samples = np.asarray(samples, dtype=np.float32).copy()
+    fade = min(len(samples) // 2, int(sample_rate * 0.005))
+    if fade:
+        ramp = np.linspace(0.0, 1.0, fade, dtype=np.float32)
+        samples[:fade] *= ramp
+        samples[-fade:] *= ramp[::-1]
+    lead = np.zeros(int(sample_rate * 0.06), dtype=np.float32)
+    tail = np.zeros(int(sample_rate * 0.08), dtype=np.float32)
+    return np.concatenate([lead, samples, tail])
+
+
+def _to_pcm16(samples: np.ndarray) -> bytes:
+    return (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+
+
+def _start_player() -> subprocess.Popen | None:
+    """Start the audio player process (audio_player.py) and wait until it's ready."""
+    global _player, _player_failures
+    with _player_lock:
+        if _player is not None and _player.poll() is None:
+            return _player
+        if _player_failures >= 3:
+            return None  # stop retrying; use the fallbacks
+        _player_failures += 1
+        try:
+            p = subprocess.Popen(
+                [sys.executable, "-u", str(PLAYER_SCRIPT)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+            line = p.stdout.readline().strip()
+            if line != b"ready":
+                print(f"[TTS] Audio player didn't start ({line.decode(errors='replace')}).", flush=True)
+                p.kill()
+                return None
+            _player = p
+            _player_failures = 0
+            return p
+        except Exception as e:
+            print(f"[TTS] Audio player didn't start ({e}).", flush=True)
+            return None
+
+
+def _play_player(samples: np.ndarray, sample_rate: int) -> bool:
+    """
+    Play through the separate audio player process. Playing inside this
+    process made speech choppy: the audio callback needs Python's lock, and the
+    wake-word loop or a YouTube lookup holding it for ~60 ms starved the
+    ~46 ms audio buffer.
+    """
+    global _player
+    p = _start_player()
+    if p is None:
+        return False
+    pcm = _to_pcm16(samples)
+    try:
+        p.stdin.write(f"{sample_rate} {len(pcm) // 2}\n".encode() + pcm)
+        p.stdin.flush()
+        reply = p.stdout.readline().strip()  # returns once the clip has finished playing
+    except Exception as e:
+        reply = str(e).encode()
+    if reply == b"done":
+        return True
+    print(f"[TTS] Audio player failed ({reply.decode(errors='replace') or 'exited'}).", flush=True)
+    if p.poll() is None and not reply.startswith(b"error"):
+        p.kill()
+    if p.poll() is not None:
+        _player = None
+    return False
+
+
+def _play_afplay(samples: np.ndarray, sample_rate: int) -> bool:
+    """Fallback on macOS: robust, but adds ~0.85 s per clip."""
+    fd, path = tempfile.mkstemp(prefix="mhci-tts-", suffix=".wav")
+    os.close(fd)
+    try:
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sample_rate)
+            w.writeframes(_to_pcm16(samples))
+        return subprocess.run(["afplay", path], check=False).returncode == 0
+    except FileNotFoundError:
+        return False
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _play_sounddevice(samples: np.ndarray, sample_rate: int) -> bool:
     try:
         import sounddevice as sd
 
-        sd.play(samples, sample_rate)
+        # Big buffer, so short stalls in this process don't cause dropouts.
+        sd.play(samples, sample_rate, blocksize=2048, latency=0.3)
         sd.wait()
-        return
+        return True
     except Exception as e:
-        print(f"[TTS] sounddevice playback failed ({e}); using afplay.", flush=True)
+        print(f"[TTS] sounddevice playback failed ({e}).", flush=True)
+        return False
 
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        path = f.name
-    with wave.open(path, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(pcm.tobytes())
-    subprocess.run(["afplay", path], check=False)
-    os.unlink(path)
+
+def _play(samples: np.ndarray, sample_rate: int):
+    samples = _prepare(samples, sample_rate)
+    if _play_player(samples, sample_rate):
+        return
+    if platform.system() == "Darwin" and _play_afplay(samples, sample_rate):
+        return
+    _play_sounddevice(samples, sample_rate)
 
 
 def _system_say(text: str):
@@ -138,8 +237,9 @@ def _ensure_worker():
 
 
 def preload():
-    """Load the voice model in the background (call once at startup)."""
+    """Load the voice model and start the audio player in the background (call once at startup)."""
     threading.Thread(target=_load_kokoro, name="tts-load", daemon=True).start()
+    threading.Thread(target=_start_player, name="tts-player", daemon=True).start()
 
 
 def speak(text: str, block: bool = False):
