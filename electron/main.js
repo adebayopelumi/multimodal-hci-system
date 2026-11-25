@@ -163,6 +163,16 @@ ipcMain.handle("assistant:start", async (_event, mode) => {
 
   // project root = repo root that contains /engine and /.venv
   const PYTHON_PROJECT_ROOT = getPythonProjectRoot();
+
+  if (!fs.existsSync(path.join(PYTHON_PROJECT_ROOT, "engine"))) {
+    sendLog(
+      "system",
+      `[Launcher] Project folder not found: ${PYTHON_PROJECT_ROOT}. ` +
+        `If you moved the project, update electron/project_path.txt and rebuild the app.`
+    );
+    return { running: false, error: "project_not_found" };
+  }
+
   const pythonExe = resolvePythonExe(PYTHON_PROJECT_ROOT);
 
   sendLog("system", `[Launcher] Starting python (${mode}) using: ${pythonExe}`);
