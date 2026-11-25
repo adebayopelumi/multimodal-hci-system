@@ -1,6 +1,8 @@
+import { useId } from "react";
+
 // Shared UI building blocks for the MHCI Assistant (see DESIGN.md).
-// Cream canvas, white cards with hairlines (no shadows), warm ink text,
-// orange only for the primary action.
+// Dark by default (Cursor's dark look), with a cream light theme. Cards with
+// hairlines and no shadows; colors come from the tokens in index.css.
 
 export const MODE_LABELS = {
   both: "Voice + Gesture",
@@ -15,6 +17,38 @@ export const MODE_OPTIONS = [
 ];
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
+
+/* ---------- Brand ---------- */
+
+// The app mark (same drawing as the macOS icon, electron/make_icon.py):
+// a near-black tile with an off-white sound wave that is also a raised hand.
+export function AppMark({ className }) {
+  const id = useId().replace(/:/g, "");
+  const fingers = [
+    [452, 352],
+    [546, 304],
+    [640, 346],
+    [734, 432],
+  ];
+  return (
+    <svg viewBox="100 100 824 824" className={className} role="img" aria-label="MHCI Assistant">
+      <defs>
+        <linearGradient id={`${id}-tile`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2b2922" />
+          <stop offset="1" stopColor="#12110a" />
+        </linearGradient>
+      </defs>
+      <rect x="100" y="100" width="824" height="824" rx="186" fill={`url(#${id}-tile)`} />
+      <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#ffffff" strokeOpacity="0.1" strokeWidth="3" />
+      <g fill="#edece6">
+        {fingers.map(([x, top]) => (
+          <rect key={x} x={x - 33} y={top} width="66" height={706 - top} rx="33" />
+        ))}
+        <rect x={338 - 33} y={600 - 104} width="66" height="208" rx="33" transform="rotate(-34 338 600)" />
+      </g>
+    </svg>
+  );
+}
 
 /* ---------- Buttons ---------- */
 
