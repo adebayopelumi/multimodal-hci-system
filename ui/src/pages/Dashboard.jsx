@@ -1,92 +1,60 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  Power,
-  PowerOff,
-  Activity,
-  Eye,
-  Volume2,
-} from "lucide-react";
+import { Mic, Hand, VideoOff, Play, Square, Activity, ArrowRight } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
 import { useLogs } from "../contexts/LogsContext";
+import {
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  LogRow,
+  Page,
+  PageHeader,
+  Segmented,
+  StatusPill,
+  MODE_OPTIONS,
+} from "../components/ui";
 
-const Dashboard = () => {
-    const {
-    microphone,
-    webcam,
-    autoStart,
-    gestureEnabled,
-    recordAudio,
-    dashboardState,
-    setDashboardState,
-  } = useSettings();
+// "Start assistant on launch": read the saved settings once when the app opens,
+// so it only fires at launch (not every time you come back to this page).
+const LAUNCH_SETTINGS = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("capstone-settings") || "{}");
+  } catch {
+    return {};
+  }
+})();
+let autoStartHandled = false;
+
+const Dashboard = ({ onNavigate }) => {
+  const { microphone, webcam, gestureEnabled, dashboardState, setDashboardState } = useSettings();
 
   // pull individual values from shared state
   const { isActive, isMicActive, isCameraActive, mode } = dashboardState;
 
-  // helper to update dashboardState in context
-  const updateDashboardState = (patch) => {
-    setDashboardState((prev) => ({
-      ...prev,
-      ...patch,
-    }));
-  };
-
-  // re-create the "setters" so the rest of your code works the same
   const setIsActive = (valueOrFn) => {
     setDashboardState((prev) => ({
       ...prev,
-      isActive:
-        typeof valueOrFn === "function"
-          ? valueOrFn(prev.isActive)
-          : valueOrFn,
-    }));
-  };
-
-  const setIsMicActive = (valueOrFn) => {
-    setDashboardState((prev) => ({
-      ...prev,
-      isMicActive:
-        typeof valueOrFn === "function"
-          ? valueOrFn(prev.isMicActive)
-          : valueOrFn,
-      
+      isActive: typeof valueOrFn === "function" ? valueOrFn(prev.isActive) : valueOrFn,
     }));
   };
 
   const setIsCameraActive = (valueOrFn) => {
     setDashboardState((prev) => ({
       ...prev,
-      isCameraActive:
-        typeof valueOrFn === "function"
-          ? valueOrFn(prev.isCameraActive)
-          : valueOrFn,
+      isCameraActive: typeof valueOrFn === "function" ? valueOrFn(prev.isCameraActive) : valueOrFn,
     }));
   };
 
   const setMode = (valueOrFn) => {
     setDashboardState((prev) => ({
       ...prev,
-      mode:
-        typeof valueOrFn === "function"
-          ? valueOrFn(prev.mode)
-          : valueOrFn,
+      mode: typeof valueOrFn === "function" ? valueOrFn(prev.mode) : valueOrFn,
     }));
   };
 
-  const [currentGesture, setCurrentGesture] = useState({
-    label: "None",
-    confidence: 0,
-  });
-  const [lastVoiceCommand, setLastVoiceCommand] = useState({
-    text: "",
-    intent: "",
-    confidence: 0,
-  });
   const [audioLevel, setAudioLevel] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   const [micStream, setMicStream] = useState(null);
   const [camStream, setCamStream] = useState(null);
@@ -97,162 +65,106 @@ const Dashboard = () => {
 
   // Shared, in-memory activity log (starts empty each launch; see LogsContext).
   // LogsContext also records everything Python prints.
-  const { logs: activityLog, addLog } = useLogs();
+  const { logs: activityLog, addLog, clearLogs } = useLogs();
 
-  // Update the gesture / voice panels from structured events Python prints as JSON
-useEffect(() => {
-  if (!window.api || !window.api.onLog) return;
-
-  const unsubscribe = window.api.onLog((data) => {
-    const msg = String(data?.message || "").trim();
-    if (!msg) return;
-
-    try {
-      const obj = JSON.parse(msg);
-
-      if (obj.type === "GESTURE") {
-        setCurrentGesture({
-          label: obj.label || "Unknown",
-          confidence: Number(obj.confidence || 0),
-        });
-      }
-
-      if (obj.type === "VOICE") {
-        setLastVoiceCommand({
-          text: obj.text || "",
-          intent: obj.intent || "",
-          confidence: Number(obj.confidence || 0),
-        });
-      }
-    } catch {}
-  });
-
-  return () => unsubscribe && unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
-
-  // auto-start from settings
-  useEffect(() => {
-    if (autoStart && !isActive) {
-      setIsActive(true);
-      addLog("SYSTEM", "Assistant auto-started", "auto_start");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart]);
+  const voiceLive = isActive && isMicActive && mode !== "gesture";
+  const gestureLive = isActive && isCameraActive && gestureEnabled && mode !== "voice";
 
   // fake audio visualizer (still random for now)
   useEffect(() => {
-    if (isActive && isMicActive && mode !== "gesture") {
+    if (voiceLive) {
       const interval = setInterval(() => {
         setAudioLevel(Math.random() * 100);
       }, 100);
       return () => clearInterval(interval);
-    } else {
-      setAudioLevel(0);
     }
-  }, [isActive, isMicActive, mode]);
+    setAudioLevel(0);
+  }, [voiceLive]);
 
-  const toggleAssistant = async () => {
-  const next = !isActive;
-  setIsActive(next);
+  const stopAssistant = async () => {
+    // UI first
+    setIsActive(false);
+    addLog("SYSTEM", "Assistant stopped", "system_stop");
 
-  addLog(
-    "SYSTEM",
-    next ? "Assistant started" : "Assistant stopped",
-    next ? "system_start" : "system_stop"
-  );
-
-  try {
-    if (!window.api) {
-      addLog("SYSTEM", "Electron API missing (window.api)", "ipc_error");
-      return;
-    }
-
-    if (next) {
-      await window.api.startAssistant(mode);
-      addLog("SYSTEM", `Python started (${mode})`, "python_start");
-
-      // ✅ sync python with current toggles immediately
-      if (window.api.sendCommand) {
-        await window.api.sendCommand({ cmd: "mic", on: isMicActive });
-        await window.api.sendCommand({ cmd: "camera", on: isCameraActive });
-        await window.api.sendCommand({ cmd: "set_mode", mode });
+    try {
+      if (!window.api) {
+        addLog("SYSTEM", "Electron API missing (window.api)", "ipc_error");
+        return;
       }
-    } else {
-      
-
       await window.api.stopAssistant();
       addLog("SYSTEM", "Python stopped", "python_stop");
+    } catch (e) {
+      console.error(e);
+      addLog("SYSTEM", `Stop error: ${String(e)}`, "python_stop_error");
     }
-  } catch (e) {
-    console.error(e);
-    addLog("SYSTEM", `Python control error: ${String(e)}`, "python_error");
-  }
-};
+  };
 
-const stopAssistant = async () => {
-  // UI first
-  setIsActive(false);
-  addLog("SYSTEM", "Assistant stopped", "system_stop");
+  const startAssistant = async (startMode) => {
+    // If already running, stop first (switch behavior)
+    if (isActive) {
+      await stopAssistant();
+    }
 
-  try {
-    if (!window.api) {
-      addLog("SYSTEM", "Electron API missing (window.api)", "ipc_error");
+    // UI first
+    setMode(startMode);
+    setIsActive(true);
+
+    addLog("SYSTEM", `Assistant started (${startMode})`, "system_start");
+
+    try {
+      if (!window.api) {
+        addLog("SYSTEM", "Electron API missing (window.api)", "ipc_error");
+        return;
+      }
+      await window.api.startAssistant(startMode);
+      addLog("SYSTEM", `Python started (${startMode})`, "python_start");
+    } catch (e) {
+      console.error(e);
+      addLog("SYSTEM", `Start error: ${String(e)}`, "python_start_error");
+      setIsActive(false);
+    }
+  };
+
+  // Start / Stop button
+  const handlePowerClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (isActive) await stopAssistant();
+      else await startAssistant(mode);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Picking a mode while running restarts in that mode; while stopped it just selects it.
+  const handleModeSelect = async (nextMode) => {
+    if (nextMode === mode || busy) return;
+    if (!isActive) {
+      setMode(nextMode);
       return;
     }
-    await window.api.stopAssistant();
-    addLog("SYSTEM", "Python stopped", "python_stop");
-  } catch (e) {
-    console.error(e);
-    addLog("SYSTEM", `Stop error: ${String(e)}`, "python_stop_error");
-  }
-};
-
-const startAssistant = async (startMode) => {
-  // If already running, stop first (switch behavior)
-  if (isActive) {
-    await stopAssistant();
-  }
-
-  // UI first
-  setMode(startMode);
-  setIsActive(true);
-
-  addLog("SYSTEM", `Assistant started (${startMode})`, "system_start");
-
-  try {
-    if (!window.api) {
-      addLog("SYSTEM", "Electron API missing (window.api)", "ipc_error");
-      return;
+    setBusy(true);
+    try {
+      await startAssistant(nextMode);
+    } finally {
+      setBusy(false);
     }
-    await window.api.startAssistant(startMode);
-    addLog("SYSTEM", `Python started (${startMode})`, "python_start");
-  } catch (e) {
-    console.error(e);
-    addLog("SYSTEM", `Start error: ${String(e)}`, "python_start_error");
-    setIsActive(false);
-  }
-};
+  };
 
-// optional helper if you want ONE stop button always visible
-const handleStopClick = async () => {
-  if (!isActive) return;
-  await stopAssistant();
-};
-
-  const handleModeChange = async (nextMode) => {
-  setMode(nextMode);
-  addLog("SYSTEM", `Mode changed to ${nextMode}`, `mode_${nextMode}`);
-
-  // ✅ Tell Python (don’t restart, just switch mode)
-  try {
-    if (isActive && window.api?.sendCommand) {
-      addLog("SYSTEM", `Sent to python: mode=${nextMode}`, "ipc_mode");
+  // auto-start from settings (once per launch)
+  useEffect(() => {
+    if (autoStartHandled) return;
+    autoStartHandled = true;
+    if (LAUNCH_SETTINGS.autoStart === true && !isActive) {
+      addLog("SYSTEM", "Assistant auto-started", "auto_start");
+      const launchMode = ["both", "voice", "gesture"].includes(LAUNCH_SETTINGS.startMode)
+        ? LAUNCH_SETTINGS.startMode
+        : "both";
+      startAssistant(launchMode);
     }
-  } catch (e) {
-    addLog("SYSTEM", `IPC mode error: ${String(e)}`, "ipc_error");
-  }
-};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // MIC STREAM (logic same, just used for visualiser / future)
   useEffect(() => {
@@ -269,10 +181,7 @@ const handleStopClick = async () => {
     }
 
     const constraints = {
-      audio:
-        microphone && microphone !== "default"
-          ? { deviceId: { exact: microphone } }
-          : true,
+      audio: microphone && microphone !== "default" ? { deviceId: { exact: microphone } } : true,
       video: false,
     };
 
@@ -300,70 +209,66 @@ const handleStopClick = async () => {
 
   // CAMERA STREAM
   useEffect(() => {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    return;
-  }
-
-  const cameraShouldBeOn =
-    isActive && isCameraActive && gestureEnabled && mode !== "voice";
-
-  // If we shouldn't be using the camera, make sure to fully stop any existing stream
-  if (!cameraShouldBeOn) {
-    if (camStreamRef.current) {
-      camStreamRef.current.getTracks().forEach((t) => t.stop());
-      camStreamRef.current = null;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return;
     }
-    if (camStream) {
-      setCamStream(null);
-    }
-    return;
-  }
 
-  const constraints = {
-    audio: false,
-    video:
-      webcam && webcam !== "default"
-        ? { deviceId: { exact: webcam } }
-        : true,
-  };
+    const cameraShouldBeOn = isActive && isCameraActive && gestureEnabled && mode !== "voice";
 
-  let cancelled = false;
-
-  navigator.mediaDevices
-    .getUserMedia(constraints)
-    .then((stream) => {
-      if (cancelled) {
-        // if the effect was cleaned up before this resolved, immediately stop this stream
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-
-      // stop any previous live stream
+    // If we shouldn't be using the camera, make sure to fully stop any existing stream
+    if (!cameraShouldBeOn) {
       if (camStreamRef.current) {
         camStreamRef.current.getTracks().forEach((t) => t.stop());
+        camStreamRef.current = null;
       }
-
-      camStreamRef.current = stream;
-      setCamStream(stream);
-      addLog("SYSTEM", "Camera stream started", "camera_stream_on");
-    })
-    .catch((err) => {
-      console.error("Camera getUserMedia error", err);
-      addLog("SYSTEM", "Camera error / permission denied", "camera_error");
-    });
-
-  // Cleanup for dependency changes / unmount
-  return () => {
-    cancelled = true;
-    if (camStreamRef.current && !cameraShouldBeOn) {
-      // if we are turning camera off, make sure it is stopped
-      camStreamRef.current.getTracks().forEach((t) => t.stop());
-      camStreamRef.current = null;
+      if (camStream) {
+        setCamStream(null);
+      }
+      return;
     }
-  };
-  // camStream is not in deps on purpose; we use camStreamRef for latest stream
-}, [isActive, isCameraActive, gestureEnabled, mode, webcam]);
 
+    const constraints = {
+      audio: false,
+      video: webcam && webcam !== "default" ? { deviceId: { exact: webcam } } : true,
+    };
+
+    let cancelled = false;
+
+    navigator.mediaDevices
+      .getUserMedia(constraints)
+      .then((stream) => {
+        if (cancelled) {
+          // if the effect was cleaned up before this resolved, immediately stop this stream
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        // stop any previous live stream
+        if (camStreamRef.current) {
+          camStreamRef.current.getTracks().forEach((t) => t.stop());
+        }
+
+        camStreamRef.current = stream;
+        setCamStream(stream);
+        addLog("SYSTEM", "Camera stream started", "camera_stream_on");
+      })
+      .catch((err) => {
+        console.error("Camera getUserMedia error", err);
+        addLog("SYSTEM", "Camera error / permission denied", "camera_error");
+      });
+
+    // Cleanup for dependency changes / unmount
+    return () => {
+      cancelled = true;
+      if (camStreamRef.current && !cameraShouldBeOn) {
+        // if we are turning camera off, make sure it is stopped
+        camStreamRef.current.getTracks().forEach((t) => t.stop());
+        camStreamRef.current = null;
+      }
+    };
+    // camStream is not in deps on purpose; we use camStreamRef for latest stream
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, isCameraActive, gestureEnabled, mode, webcam]);
 
   // attach camStream to <video>
   useEffect(() => {
@@ -371,9 +276,7 @@ const handleStopClick = async () => {
 
     if (camStream) {
       videoRef.current.srcObject = camStream;
-      videoRef.current
-        .play()
-        .catch((err) => console.log("video play error", err));
+      videoRef.current.play().catch((err) => console.log("video play error", err));
     } else {
       videoRef.current.srcObject = null;
     }
@@ -384,302 +287,161 @@ const handleStopClick = async () => {
     if (!gestureEnabled && isCameraActive) {
       setIsCameraActive(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gestureEnabled, isCameraActive]);
 
-  const toggleMic = async () => {
-  const next = !isMicActive;
-
-  setIsMicActive(next);
-
-  addLog(
-    "SYSTEM",
-    next ? "Microphone unmuted" : "Microphone muted",
-    next ? "mic_on" : "mic_off"
-  );
-
-  // ✅ Tell Python
-  try {
-    if (window.api?.sendCommand) {
-      await window.api.sendCommand({ cmd: "mic", on: next });
-      addLog("SYSTEM", `Sent to python: mic=${next}`, "ipc_mic");
-    }
-  } catch (e) {
-    addLog("SYSTEM", `IPC mic error: ${String(e)}`, "ipc_error");
-  }
-};
-
-  const toggleCamera = async () => {
-  const next = !isCameraActive;
-
-  setIsCameraActive(next);
-
-  addLog(
-    "SYSTEM",
-    next ? "Camera enabled" : "Camera disabled",
-    next ? "camera_on" : "camera_off"
-  );
-
-  // ✅ Tell Python
-  try {
-    if (window.api?.sendCommand) {
-      await window.api.sendCommand({ cmd: "camera", on: next });
-      addLog("SYSTEM", `Sent to python: camera=${next}`, "ipc_camera");
-    }
-  } catch (e) {
-    addLog("SYSTEM", `IPC camera error: ${String(e)}`, "ipc_error");
-  }
-};
-
   // Final safety: if Dashboard unmounts for any reason, stop any leftover camera stream
-useEffect(() => {
-  return () => {
-    if (camStreamRef.current) {
-      camStreamRef.current.getTracks().forEach((t) => t.stop());
-      camStreamRef.current = null;
-    }
-  };
-}, []);
+  useEffect(() => {
+    return () => {
+      if (camStreamRef.current) {
+        camStreamRef.current.getTracks().forEach((t) => t.stop());
+        camStreamRef.current = null;
+      }
+    };
+  }, []);
 
+  const recentLogs = activityLog.slice(0, 40);
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Control Bar */}
-      {/* Control Bar */}
-<div className="flex items-center justify-between px-4 py-2 bg-[#1e1b3a] border-b border-[#3d3870]">
-  <div className="flex items-center gap-2">
-    <button
-      onClick={() => startAssistant("both")}
-      className="px-4 py-2 rounded-lg font-semibold bg-violet-600 hover:bg-violet-700 transition-all"
-    >
-      Start Both
-    </button>
-
-    <button
-      onClick={() => startAssistant("voice")}
-      className="px-4 py-2 rounded-lg font-semibold bg-emerald-600 hover:bg-emerald-700 transition-all"
-    >
-      Start Voice
-    </button>
-
-    <button
-      onClick={() => startAssistant("gesture")}
-      className="px-4 py-2 rounded-lg font-semibold bg-sky-600 hover:bg-sky-700 transition-all"
-    >
-      Start Gesture
-    </button>
-
-    <button
-      onClick={handleStopClick}
-      disabled={!isActive}
-      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-        isActive
-          ? "bg-red-600 hover:bg-red-700"
-          : "bg-[#3d3870] cursor-not-allowed opacity-60"
-      }`}
-    >
-      Stop
-    </button>
-  </div>
-
-  <div className="text-xs text-violet-200">
-    Status:{" "}
-    <span className={isActive ? "text-green-400" : "text-red-400"}>
-      {isActive ? `Running (${mode})` : "Stopped"}
-    </span>
-  </div>
-</div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex gap-3 p-3 overflow-hidden">
-        {/* Webcam / Gesture Panel */}
-        <div className="flex-1 bg-[#1e1b3a] rounded-lg p-3 border border-[#3d3870] flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              <Video className="w-4 h-4 text-violet-400" />
-              Gesture Detection
-            </h2>
-            <div
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                isCameraActive && gestureEnabled && isActive && mode !== "voice"
-                  ? "bg-green-500/20 text-green-400"
-                  : "bg-red-500/20 text-red-400"
-              }`}
-            >
-              {isCameraActive && gestureEnabled && isActive && mode !== "voice"
-                ? "Active"
-                : "Inactive"}
-            </div>
-          </div>
-
-          {/* REAL VIDEO FEED */}
-          <div className="flex-1 bg-[#13112b] rounded-lg mb-2 flex items-center justify-center border border-[#3d3870] min-h-0 overflow-hidden">
-            {isCameraActive && gestureEnabled && camStream ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-                // Mirror the preview like a selfie camera, matching the gesture
-                // engine (it flips its frames too), so the image moves with your hand.
-                style={{ transform: "scaleX(-1)" }}
-              />
+    <Page className="flex h-full min-h-[680px] flex-col gap-5">
+      <PageHeader
+        title="Dashboard"
+        description={
+          isActive
+            ? 'Say "Hey Jarvis", wait for the chime, then ask. Gestures work whenever your hand is in view.'
+            : "Pick what to use, then start the assistant."
+        }
+        actions={
+          <>
+            <Segmented
+              label="Input mode"
+              options={MODE_OPTIONS}
+              value={mode}
+              onChange={handleModeSelect}
+              disabled={busy}
+            />
+            {isActive ? (
+              <Button variant="secondary" onClick={handlePowerClick} disabled={busy} className="min-w-[104px]">
+                <Square className="fill-current" aria-hidden="true" />
+                Stop
+              </Button>
             ) : (
-              <div className="text-center">
-                <VideoOff className="w-10 h-10 text-violet-400/50 mx-auto mb-1" />
-                <p className="text-white0 text-xs">
-                  Camera disabled or not started
-                </p>
-              </div>
+              <Button variant="primary" onClick={handlePowerClick} disabled={busy} className="min-w-[104px]">
+                <Play className="fill-current" aria-hidden="true" />
+                Start
+              </Button>
             )}
-          </div>
+          </>
+        }
+      />
 
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-violet-300">Gesture:</span>
-              <span className="font-semibold text-violet-400">
-                {currentGesture.label}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-violet-300">Confidence:</span>
-              <span className="font-mono text-green-400">
-                {(currentGesture.confidence * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="w-full bg-[#2e2a5a] rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-linear-to-r from-violet-500 to-purple-400 h-full transition-all duration-300"
-                style={{ width: `${currentGesture.confidence * 100}%` }}
-              />
+      {/* Live panels */}
+      <div className="grid min-h-[300px] flex-1 grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Gesture */}
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader
+            icon={Hand}
+            title="Gesture"
+            actions={<StatusPill live={gestureLive} liveLabel="Tracking" idleLabel="Off" />}
+          />
+          <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+            <div className="relative grid min-h-[150px] flex-1 place-items-center overflow-hidden rounded-md border border-hairline-soft bg-canvas-soft">
+              {isCameraActive && gestureEnabled && camStream ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="absolute inset-0 h-full w-full object-cover"
+                  // Mirror the preview like a selfie camera, matching the gesture
+                  // engine (it flips its frames too), so the image moves with your hand.
+                  style={{ transform: "scaleX(-1)" }}
+                />
+              ) : isActive && mode !== "voice" ? (
+                <EmptyState compact icon={VideoOff} title="Waiting for the camera">
+                  If this stays, allow camera access in System Settings › Privacy &amp; Security.
+                </EmptyState>
+              ) : (
+                <EmptyState compact icon={VideoOff} title="Camera is off">
+                  {mode === "voice"
+                    ? "Voice mode doesn't use the camera. Switch to Gesture or Voice + Gesture."
+                    : "Start the assistant to see your camera here."}
+                </EmptyState>
+              )}
             </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Audio / Voice Panel (still random visualiser) */}
-        <div className="flex-1 bg-[#1e1b3a] rounded-lg p-3 border border-[#3d3870] flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              <Mic className="w-4 h-4 text-green-400" />
-              Voice Recognition
-            </h2>
+        {/* Voice */}
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader
+            icon={Mic}
+            title="Voice"
+            actions={<StatusPill live={voiceLive} liveLabel="Listening" idleLabel="Off" />}
+          />
+          <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
             <div
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                isMicActive && isActive && mode !== "gesture"
-                  ? "bg-green-500/20 text-green-400"
-                  : "bg-red-500/20 text-red-400"
-              }`}
+              className="flex min-h-[96px] flex-1 items-center justify-center gap-[3px] overflow-hidden rounded-md border border-hairline-soft bg-canvas-soft px-4"
+              aria-hidden="true"
             >
-              {isMicActive && isActive && mode !== "gesture"
-                ? "Listening"
-                : "Muted"}
-            </div>
-          </div>
-
-          <div className="flex-1 bg-[#13112b] rounded-lg p-2 mb-2 border border-[#3d3870] min-h-0">
-            <div className="flex items-end justify-center gap-0.5 h-full ">
-              {Array.from({ length: 70 }).map((_, i) => (
+              {Array.from({ length: 56 }).map((_, i) => (
                 <div
                   key={i}
-                  className="bg-linear-to-t from-violet-500 to-violet-400 w-1 rounded-full transition-all duration-100"
+                  className={`w-[3px] rounded-full transition-[height] duration-100 ${
+                    voiceLive ? "bg-ink/75" : "bg-hairline-strong"
+                  }`}
                   style={{
-                    height:
-                      isMicActive && isActive && mode !== "gesture"
-                        ? `${Math.max(
-                            15,
-                            audioLevel *
-                              Math.abs(
-                                Math.sin((i + Date.now() / 100) * 0.5)
-                              )
-                          )}%`
-                        : "10%",
+                    height: voiceLive
+                      ? `${Math.max(10, audioLevel * Math.abs(Math.sin((i + Date.now() / 100) * 0.5)))}%`
+                      : "6%",
                   }}
                 />
               ))}
             </div>
           </div>
-
-          <div className="space-y-1.5">
-            <div>
-              <span className="text-violet-300 text-xs">Last Command:</span>
-              <p className="font-medium text-sm text-white mt-0.5 truncate">
-                {lastVoiceCommand.text || "Waiting for input..."}
-              </p>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-violet-300">Intent:</span>
-              <span className="font-mono text-purple-400">
-                {lastVoiceCommand.intent || "N/A"}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-violet-300">Confidence:</span>
-              <span className="font-mono text-green-400">
-                {lastVoiceCommand.confidence
-                  ? `${(lastVoiceCommand.confidence * 100).toFixed(1)}%`
-                  : "0%"}
-              </span>
-            </div>
-            <p className="text-[0.65rem] text-white0">
-              Mic device: {microphone || "default"}{" "}
-              {recordAudio ? "(recording enabled)" : ""}
-            </p>
-          </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Activity Log */}
-      <div
-        className="bg-[#1e1b3a] mx-3 mb-3 rounded-lg p-2 border border-[#3d3870]"
-        style={{ height: "180px" }}
-      >
-        <h2 className="text-xs font-semibold mb-1.5 flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-purple-400" />
-          Live Activity Log
-        </h2>
-        <div
-          className="space-y-1 overflow-y-auto"
-          style={{ height: "145px" }}
-        >
-          {activityLog.map((log) => (
-            <div
-              key={log.id}
-              className="flex items-center gap-2 bg-[#13112b] px-2 py-1 rounded border border-[#3d3870] text-xs"
-            >
-              <span className="text-white0 font-mono min-w-[55px] text-[10px]">
-                {log.timestamp}
-              </span>
-              <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold min-w-[60px] text-center ${
-                  log.type === "VOICE"
-                    ? "bg-green-500/20 text-green-400"
-                    : log.type === "GESTURE"
-                    ? "bg-violet-500/20 text-violet-400"
-                    : log.type === "ACTION"
-                    ? "bg-purple-500/20 text-purple-400"
-                    : log.type === "SYSTEM"
-                    ? "bg-amber-500/20 text-amber-300"
-                    : "bg-slate-500/20 text-violet-300"
-                }`}
-              >
-                {log.type}
-              </span>
-              <span className="text-white flex-1 truncate">{log.command}</span>
-              {log.intent && (
-                <>
-                  <span className="text-white0">→</span>
-                  <span className="text-violet-300 font-mono text-[10px]">
-                    {log.intent}
-                  </span>
-                </>
+      {/* Activity timeline */}
+      <Card className="flex h-[216px] shrink-0 flex-col">
+        <CardHeader
+          icon={Activity}
+          title="Activity"
+          meta={
+            <span className="text-caption tabular-nums text-muted">
+              {activityLog.length} {activityLog.length === 1 ? "event" : "events"}
+            </span>
+          }
+          actions={
+            <>
+              <Button variant="ghost" size="sm" onClick={clearLogs} disabled={!activityLog.length}>
+                Clear
+              </Button>
+              {onNavigate && (
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("history")}>
+                  View all
+                  <ArrowRight aria-hidden="true" />
+                </Button>
               )}
-            </div>
-          ))}
+            </>
+          }
+        />
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-b-lg bg-canvas-soft">
+          {recentLogs.length === 0 ? (
+            <EmptyState title="Nothing yet">
+              What the assistant hears, sees and does will show up here.
+            </EmptyState>
+          ) : (
+            <ul>
+              {recentLogs.map((log) => (
+                <LogRow key={log.id} log={log} compact />
+              ))}
+            </ul>
+          )}
         </div>
-      </div>
-    </div>
+      </Card>
+    </Page>
   );
 };
 
 export default Dashboard;
- 

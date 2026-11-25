@@ -7,14 +7,14 @@ export default function SwipeLeft() {
     <GestureSandbox>
       {/* Current card */}
       <motion.div
-        className="absolute inset-6 bg-slate-300 rounded-md"
+        className="absolute inset-6 bg-hairline-strong rounded-md"
         animate={{ x: [0, -140] }}
         transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 0.5 }}
       />
 
       {/* Next card */}
       <motion.div
-        className="absolute inset-6 bg-slate-200 rounded-md"
+        className="absolute inset-6 bg-strong rounded-md"
         initial={{ x: 140 }}
         animate={{ x: [140, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 0.5 }}

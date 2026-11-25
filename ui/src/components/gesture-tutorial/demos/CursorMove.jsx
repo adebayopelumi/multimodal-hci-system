@@ -9,7 +9,7 @@ export default function CursorMove() {
 
         {/* Cursor dot — close to hand */}
         <motion.div
-          className="absolute z-20 w-2.5 h-2.5 bg-black rounded-full"
+          className="absolute z-20 w-2.5 h-2.5 bg-ink rounded-full"
           animate={{
             x: [-55, -35, -45, -55], // MUCH closer
             y: [0, 10, 18, 0],

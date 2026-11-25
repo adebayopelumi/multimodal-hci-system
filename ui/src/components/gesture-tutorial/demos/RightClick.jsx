@@ -6,12 +6,12 @@ export default function RightClick() {
   return (
     <GestureSandbox>
       <motion.div
-        className="absolute w-3 h-3 bg-black rounded-full"
+        className="absolute w-3 h-3 bg-ink rounded-full"
         style={{ left: 80, top: 60 }}
       />
 
       <motion.div
-        className="absolute text-xs bg-[#1e1b3a] text-white px-2 py-1 rounded"
+        className="absolute text-xs bg-ink text-canvas px-2 py-1 rounded"
         animate={{ opacity: [0, 1, 0] }}
         transition={{ duration: 2, repeat: Infinity }}
         style={{ left: 90, top: 70 }}

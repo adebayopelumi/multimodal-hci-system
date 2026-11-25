@@ -10,6 +10,7 @@ Latency notes (M2 MacBook Air):
   - Simple commands skip the LLM entirely; others use a fast planner (~1 s).
 """
 
+import json
 import re
 import subprocess
 import time
@@ -134,6 +135,9 @@ def handle_command(audio_stream, vad: VAD):
     plan = plan_command(text)
     t_planned = time.time()
     print(f"[Voice] Plan ({plan.source}): {plan.actions}")
+    # For the app's Dashboard ("Last command" panel and the activity log)
+    steps = " → ".join(a.get("intent", "?") for a in plan.actions) or "no action"
+    print(json.dumps({"type": "VOICE", "text": text, "intent": steps}), flush=True)
 
     say = plan.say
     if any(a.get("intent") in _SELF_SPEAKING for a in plan.actions):

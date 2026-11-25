@@ -7,6 +7,8 @@ const SettingsContext = createContext(null);
 export function SettingsProvider({ children }) {
   const [theme, setTheme] = useState("dark");
   const [autoStart, setAutoStart] = useState(false);
+  // Which inputs "Start assistant on launch" starts: "both" | "voice" | "gesture"
+  const [startMode, setStartMode] = useState("both");
   const [microphone, setMicrophone] = useState("default");
   const [webcam, setWebcam] = useState("default");
   const [gestureEnabled, setGestureEnabled] = useState(true);
@@ -31,6 +33,7 @@ export function SettingsProvider({ children }) {
 
       if (s.theme) setTheme(s.theme);
       if (typeof s.autoStart === "boolean") setAutoStart(s.autoStart);
+      if (["both", "voice", "gesture"].includes(s.startMode)) setStartMode(s.startMode);
       if (s.microphone) setMicrophone(s.microphone);
       if (s.webcam) setWebcam(s.webcam);
       if (typeof s.gestureEnabled === "boolean")
@@ -50,6 +53,7 @@ export function SettingsProvider({ children }) {
     const settings = {
       theme,
       autoStart,
+      startMode,
       microphone,
       webcam,
       gestureEnabled,
@@ -60,6 +64,7 @@ export function SettingsProvider({ children }) {
   }, [
     theme,
     autoStart,
+    startMode,
     microphone,
     webcam,
     gestureEnabled,
@@ -81,6 +86,8 @@ export function SettingsProvider({ children }) {
         setTheme,
         autoStart,
         setAutoStart,
+        startMode,
+        setStartMode,
         microphone,
         setMicrophone,
         webcam,

@@ -27,6 +27,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    // Dark canvas color, so the window doesn't flash white before the UI loads
+    backgroundColor: "#13120b",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
     },

@@ -1,57 +1,37 @@
-import React from 'react'
-import { Activity, Cpu,BookOpen,HelpCircle } from 'lucide-react';
-import { History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
+import React from "react";
+import { LayoutDashboard, History as HistoryIcon, Settings as SettingsIcon, CircleHelp } from "lucide-react";
 
-const Navbar = ({page,setPage}) => {
+const PAGES = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "history", label: "History", icon: HistoryIcon },
+  { id: "settings", label: "Settings", icon: SettingsIcon },
+  { id: "tutorial", label: "Help", icon: CircleHelp },
+];
+
+const Navbar = ({ page, setPage }) => {
   return (
-    <nav className="flex gap-2">
+    <nav aria-label="Main" className="flex items-center gap-1">
+      {PAGES.map(({ id, label, icon: Icon }) => {
+        const active = page === id;
+        return (
           <button
-            onClick={() => setPage('dashboard')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              page === 'dashboard'
-                ? 'bg-violet-600 text-white'
-                : 'bg-[#2e2a5a] text-violet-200 hover:bg-[#3d3870]'
+            key={id}
+            type="button"
+            onClick={() => setPage(id)}
+            aria-current={active ? "page" : undefined}
+            className={`inline-flex h-8 items-center gap-2 rounded-full px-3.5 text-ui font-medium transition-colors duration-150 ${
+              active
+                ? "bg-card text-ink ring-1 ring-hairline-strong dark:bg-strong dark:ring-0"
+                : "text-body hover:bg-strong/60 hover:text-ink"
             }`}
           >
-            <Activity className="w-4 h-4" />
-            Dashboard
+            <Icon className={`size-4 ${active ? "text-ink" : "text-muted"}`} aria-hidden="true" />
+            {label}
           </button>
-          <button
-            onClick={() => setPage('history')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              page === 'history'
-                ? 'bg-violet-600 text-white'
-                : 'bg-[#2e2a5a] text-violet-200 hover:bg-[#3d3870]'
-            }`}
-          >
-            <HistoryIcon className="w-4 h-4" />
-            History
-          </button>
-          <button
-            onClick={() => setPage('settings')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              page === 'settings'
-                ? 'bg-violet-600 text-white'
-                : 'bg-[#2e2a5a] text-violet-200 hover:bg-[#3d3870]'
-            }`}
-          >
-            <SettingsIcon className="w-4 h-4" />
-            Settings
-          </button>
-          <button
-            onClick={() => setPage('tutorial')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              page === 'tutorial'
-                ? 'bg-violet-600 text-white'
-                : 'bg-[#2e2a5a] text-violet-200 hover:bg-[#3d3870]'
-            }`}
-          >
-            <HelpCircle className="w-4 h-4" />
-            
-            Help
-          </button>
-        </nav>
-  )
-}
+        );
+      })}
+    </nav>
+  );
+};
 
-export default Navbar
+export default Navbar;

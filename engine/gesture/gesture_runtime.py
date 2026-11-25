@@ -1,5 +1,6 @@
 # engine/gesture/gesture_runtime.py
 
+import json
 import time
 import warnings
 import cv2
@@ -58,6 +59,12 @@ def _clamp_int(v: int, lo: int, hi: int) -> int:
     if v > hi:
         return hi
     return v
+
+
+def _fire(label: str, intent: str, score: float | None = None):
+    """Run a gesture's action and tell the app's Dashboard which gesture it was."""
+    print(json.dumps({"type": "GESTURE", "label": label, "intent": intent, "confidence": score}), flush=True)
+    dispatch(intent, params={})
 
 
 def _get_screen_size() -> tuple[int, int]:
@@ -354,29 +361,29 @@ def main():
         # 1) Motion swipes -> fire ONCE per swipe event 
         if motion_fire.should_fire(motion_label, now):
             if motion_label == "swipe_right":
-                dispatch("next_action", params={})
+                _fire("Swipe right", "next_action")
             elif motion_label == "swipe_left":
-                dispatch("previous_action", params={})
+                _fire("Swipe left", "previous_action")
             elif motion_label == "swipe_up":
-                dispatch("scroll_up", params={})
+                _fire("Swipe up", "scroll_up")
             elif motion_label == "swipe_down":
-                dispatch("scroll_down", params={})
+                _fire("Swipe down", "scroll_down")
 
-        # 2) Continuous scroll holds 
+        # 2) Continuous scroll holds
         if static_label == "scroll_up_hold" and scroll_up_limiter.ready(now):
-            dispatch("scroll_up", params={})
+            _fire("Scroll up", "scroll_up", static_score)
         if static_label == "scroll_down_hold" and scroll_down_limiter.ready(now):
-            dispatch("scroll_down", params={})
+            _fire("Scroll down", "scroll_down", static_score)
 
-        # 3) Screenshot 
+        # 3) Screenshot
         if screenshot_trigger.update(static_label, now):
-            dispatch("capture_screen", params={})
+            _fire("Screenshot", "capture_screen", static_score)
 
         # 5) Clicks
         if click_label == "click_left":
-            dispatch("mouse_left_click", params={})
+            _fire("Left click", "mouse_left_click")
         elif click_label == "click_right":
-            dispatch("mouse_right_click", params={})
+            _fire("Right click", "mouse_right_click")
 
         # 7) Cursor movement
         if static_label == "move_cursor" and hand_landmarks is not None:

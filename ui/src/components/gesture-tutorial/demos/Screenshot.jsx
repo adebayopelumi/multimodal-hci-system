@@ -5,7 +5,7 @@ import Screenshotimg from "../../../assets/gestures/screenshot.png";
 export default function Screenshot() {
   return (
     <GestureSandbox>
-      <div className="absolute inset-6 bg-slate-200 rounded-md" />
+      <div className="absolute inset-6 bg-strong rounded-md" />
 
       <motion.div
         className="absolute inset-0 bg-white"
@@ -14,7 +14,7 @@ export default function Screenshot() {
       />
 
       <motion.div
-        className="absolute inset-6 border-2 border-black"
+        className="absolute inset-6 border-2 border-ink"
         animate={{ scale: [1, 0.95, 1] }}
         transition={{ duration: 2, repeat: Infinity }}
       />

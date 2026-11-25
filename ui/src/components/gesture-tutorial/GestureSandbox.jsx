@@ -1,6 +1,6 @@
 export default function GestureSandbox({ children }) {
   return (
-    <div className="relative h-40 bg-white rounded-lg overflow-hidden border border-slate-200">
+    <div className="relative h-40 overflow-hidden bg-canvas-soft">
       {children}
     </div>
   );

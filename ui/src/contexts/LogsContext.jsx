@@ -8,6 +8,17 @@ const MAX_LOGS = 200;
 
 const LogsContext = createContext(null);
 
+// {"type": "VOICE" | "GESTURE", ...} lines printed by the Python engine
+export function parseEvent(line) {
+  if (!line.startsWith("{")) return null;
+  try {
+    const obj = JSON.parse(line);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
 export function LogsProvider({ children }) {
   const [logs, setLogs] = useState([]);
   const nextId = useRef(0);
@@ -41,18 +52,24 @@ export function LogsProvider({ children }) {
     if (!window.api || !window.api.onLog) return;
 
     const unsubscribe = window.api.onLog((data) => {
-      const msg = String(data?.message || "").trim();
-      if (!msg) return;
+      // One chunk of output can hold several printed lines: log each on its own.
+      const lines = String(data?.message || "").split(/\r?\n/);
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
 
-      addLog(data.type === "stderr" ? "SYSTEM" : "ACTION", msg, data.type || "");
+        // Structured events printed by Python as JSON: log them as Voice / Gesture
+        const event = parseEvent(line);
+        if (event?.type === "GESTURE") {
+          addLog("GESTURE", event.label || "gesture", event.intent || "");
+          continue;
+        }
+        if (event?.type === "VOICE") {
+          addLog("VOICE", event.text || "voice", event.intent || "");
+          continue;
+        }
 
-      // Structured events printed by Python as JSON
-      try {
-        const obj = JSON.parse(msg);
-        if (obj.type === "GESTURE") addLog("GESTURE", obj.label || "gesture", obj.intent || "");
-        if (obj.type === "VOICE") addLog("VOICE", obj.text || "voice", obj.intent || "");
-      } catch {
-        // plain text line
+        addLog(data.type === "stdout" ? "ACTION" : "SYSTEM", line, data.type === "stderr" ? "stderr" : "");
       }
     });
 

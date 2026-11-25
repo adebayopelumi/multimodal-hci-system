@@ -6,12 +6,12 @@ export default function LeftClick() {
   return (
     <GestureSandbox>
       <motion.div
-        className="absolute w-3 h-3 bg-black rounded-full"
+        className="absolute w-3 h-3 bg-ink rounded-full"
         animate={{ x: 80, y: 60 }}
       />
 
       <motion.div
-        className="absolute w-10 h-10 border border-black rounded-full"
+        className="absolute w-10 h-10 border border-ink rounded-full"
         animate={{ scale: [0, 1, 0], opacity: [0, 1, 0] }}
         transition={{ duration: 1.5, repeat: Infinity }}
         style={{ left: 74, top: 54 }}

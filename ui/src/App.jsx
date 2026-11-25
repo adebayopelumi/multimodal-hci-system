@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { MotionConfig } from "framer-motion";
+import { AudioLines } from "lucide-react";
 
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
@@ -6,42 +8,63 @@ import Settings from "./pages/Settings";
 import Tutorial from "./pages/Tutorial";
 
 import Navbar from "./components/Navbar";
-import { Activity, Cpu,BookOpen } from 'lucide-react';
-import { History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
+import { MODE_LABELS } from "./components/ui";
+import { useSettings } from "./contexts/SettingsContext";
 
+function RunStatus() {
+  const { dashboardState } = useSettings();
+  const { isActive, mode } = dashboardState;
+  return (
+    <div className="flex items-center justify-end gap-2 text-caption" role="status" aria-live="polite">
+      <span className="relative flex size-2">
+        {isActive && (
+          <span className="absolute inline-flex size-full rounded-full bg-success opacity-60 motion-safe:animate-ping" />
+        )}
+        <span className={`relative inline-flex size-2 rounded-full ${isActive ? "bg-success" : "bg-muted-soft"}`} />
+      </span>
+      <span className={isActive ? "text-ink font-medium" : "text-muted"}>
+        {isActive ? "Running" : "Stopped"}
+      </span>
+      {isActive && <span className="text-muted">· {MODE_LABELS[mode] || mode}</span>}
+    </div>
+  );
+}
 
-// Main App Component
 const App = () => {
-  const [page, setPage] = useState('dashboard');
+  const [page, setPage] = useState("dashboard");
 
   const renderPage = () => {
     switch (page) {
-      case 'dashboard': return <Dashboard />;
-      case 'history': return <History />;
-      case 'settings': return <Settings />;
-      case 'tutorial': return <Tutorial />;
-      default: return <Dashboard />;
+      case "history":
+        return <History />;
+      case "settings":
+        return <Settings />;
+      case "tutorial":
+        return <Tutorial />;
+      default:
+        return <Dashboard onNavigate={setPage} />;
     }
   };
 
   return (
-    <div className="h-screen bg-linear-to-br from-[#13112b] via-[#1b1736] to-[#0e0c22] text-white flex flex-col overflow-hidden">
-      {/* Header with Title and Navigation */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[#3d3870]">
-        <div className="flex items-center gap-3">
-          <div className="bg-violet-500 p-2 rounded-lg">
-            <Cpu className="w-5 h-5" />
+    <MotionConfig reducedMotion="user">
+      <div className="flex h-screen flex-col overflow-hidden bg-canvas text-ink">
+        <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-hairline px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-6 place-items-center rounded-sm bg-primary text-on-primary" aria-hidden="true">
+              <AudioLines className="size-3.5" strokeWidth={2.25} />
+            </span>
+            <span className="text-title font-medium tracking-[-0.01em] text-ink">MHCI Assistant</span>
           </div>
-          <h1 className="text-xl font-bold">MHCI Assistant</h1>
-        </div>
 
-        {/* Navigation */}
-        <Navbar page={page} setPage={setPage}/>
-      </header>
+          <Navbar page={page} setPage={setPage} />
 
-      {/* Page Content */}
-      {renderPage()}
-    </div>
+          <RunStatus />
+        </header>
+
+        <main className="min-h-0 flex-1">{renderPage()}</main>
+      </div>
+    </MotionConfig>
   );
 };
 

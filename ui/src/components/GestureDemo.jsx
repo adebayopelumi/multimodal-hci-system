@@ -29,7 +29,7 @@ export default function GestureDemo({ src, type }) {
   };
 
   return (
-    <div className="flex items-center justify-center bg-white rounded-lg h-40 border border-slate-200">
+    <div className="flex items-center justify-center bg-canvas-soft rounded-lg h-40 border border-hairline">
       <motion.img
         src={src}
         alt=""

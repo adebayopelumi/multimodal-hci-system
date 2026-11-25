@@ -1,1 +1,160 @@
 @import "tailwindcss";
+
+/* Dark theme is a class on <html> (set from Settings › Appearance), not the OS setting */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens, from DESIGN.md (warm cream canvas, warm ink, one orange accent,
+ * hairlines instead of shadows). Use the token utilities (bg-canvas, text-ink,
+ * border-hairline, ...) rather than raw hex values in components.
+ */
+@theme {
+  /* Brand: orange is reserved for the primary action and the app mark */
+  --color-primary: #f54e00;
+  --color-primary-active: #d04200;
+  --color-on-primary: #ffffff;
+
+  /* Text */
+  --color-ink: #26251e;
+  --color-body: #5a5852;
+  --color-muted: #807d72;
+  --color-muted-soft: #a09c92;
+
+  /* Surfaces */
+  --color-canvas: #f7f7f4;
+  --color-canvas-soft: #fafaf7;
+  --color-card: #ffffff;
+  --color-strong: #e6e5e0;
+
+  /* Hairlines */
+  --color-hairline: #e6e5e0;
+  --color-hairline-soft: #efeee8;
+  --color-hairline-strong: #cfcdc4;
+
+  /* Timeline pastels: only for the activity timeline (log type pills) */
+  --color-tl-thinking: #dfa88f;
+  --color-tl-grep: #9fc9a2;
+  --color-tl-read: #9fbbe0;
+  --color-tl-edit: #c0a8dd;
+  --color-tl-done: #c08532;
+
+  /* Semantic */
+  --color-success: #1f8a65;
+  --color-error: #cf2d56;
+
+  /* Type: Inter / JetBrains Mono if installed, otherwise the Mac's own fonts */
+  --font-sans: "Inter", "Inter Variable", system-ui, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+
+  --text-display-md: 26px;
+  --text-display-md--line-height: 1.25;
+  --text-display-md--letter-spacing: -0.325px;
+  --text-display-sm: 22px;
+  --text-display-sm--line-height: 1.3;
+  --text-display-sm--letter-spacing: -0.11px;
+  --text-stat: 28px;
+  --text-stat--line-height: 1.1;
+  --text-stat--letter-spacing: -0.5px;
+  --text-title: 15px;
+  --text-title--line-height: 1.4;
+  --text-ui: 14px;
+  --text-ui--line-height: 1.5;
+  --text-caption: 13px;
+  --text-caption--line-height: 1.4;
+  --text-code: 12.5px;
+  --text-code--line-height: 1.5;
+  --text-eyebrow: 11px;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.88px;
+
+  /* Shape */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/*
+ * Dark theme (default): Cursor's dark look, colors sampled from cursor.com.
+ * Same token names, so every component switches automatically.
+ */
+@layer base {
+  html.dark {
+    color-scheme: dark;
+
+    --color-primary: #ececec;
+    --color-primary-active: #d6d5d0;
+    --color-on-primary: #0e0f0a;
+
+    --color-ink: #edece6;
+    --color-body: #c4c3bc;
+    --color-muted: #989790;
+    --color-muted-soft: #6f6e67;
+
+    --color-canvas: #13120b;
+    --color-canvas-soft: #17160f;
+    --color-card: #1a1912;
+    --color-strong: #26241e;
+
+    --color-hairline: #27261f;
+    --color-hairline-soft: #22211b;
+    --color-hairline-strong: #3a3932;
+
+    --color-success: #4c9f78;
+    --color-error: #d4687e;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+
+  /* Keyboard focus: visible ink ring, never shown for mouse clicks */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+
+  button,
+  [role="switch"],
+  [role="radio"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Quiet, thin scrollbars that match the hairlines */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hairline-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

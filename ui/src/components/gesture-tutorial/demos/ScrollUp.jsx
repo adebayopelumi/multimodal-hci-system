@@ -15,10 +15,10 @@ export default function ScrollUp() {
           ease: "linear",
         }}
       >
-        <div className="h-4 bg-slate-300 rounded" />
-        <div className="h-4 bg-slate-300 rounded" />
-        <div className="h-4 bg-slate-300 rounded" />
-        <div className="h-4 bg-slate-300 rounded" />
+        <div className="h-4 bg-hairline-strong rounded" />
+        <div className="h-4 bg-hairline-strong rounded" />
+        <div className="h-4 bg-hairline-strong rounded" />
+        <div className="h-4 bg-hairline-strong rounded" />
       </motion.div>
 
       <motion.img

@@ -1,18 +1,51 @@
 import React, { useEffect, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Trash2, Check } from "lucide-react";
 import { useSettings } from "../contexts/SettingsContext";
 import { useLogs } from "../contexts/LogsContext";
+import { Button, Card, Eyebrow, Page, PageHeader, Segmented, Switch, MODE_OPTIONS } from "../components/ui";
+
+const SETTINGS_KEY = "capstone-settings";
+
+// Save a setting right away too (not only on the next render), so it survives
+// quitting the app straight after changing it.
+function persistNow(patch) {
+  try {
+    const prev = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...prev, ...patch }));
+  } catch {
+    // storage unavailable: the settings context still saves on the next render
+  }
+}
+
+function Section({ title, children }) {
+  return (
+    <section className="space-y-3">
+      <Eyebrow>{title}</Eyebrow>
+      <Card className="divide-y divide-hairline-soft">{children}</Card>
+    </section>
+  );
+}
+
+function Row({ label, description, htmlFor, children }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 px-5 py-4">
+      <div className="min-w-[220px] flex-1">
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className="cursor-pointer text-ui font-medium text-ink">
+            {label}
+          </label>
+        ) : (
+          <p className="text-ui font-medium text-ink">{label}</p>
+        )}
+        {description && <p className="mt-0.5 text-caption text-muted">{description}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-3">{children}</div>
+    </div>
+  );
+}
 
 export default function Settings() {
-  const {
-    theme,
-    setTheme,
-    autoStart,
-    setAutoStart,
-
-    startMode,
-    setStartMode,
-  } = useSettings();
+  const { autoStart, setAutoStart, startMode, setStartMode, theme, setTheme } = useSettings();
 
   const { logs, clearLogs } = useLogs();
   const [justCleared, setJustCleared] = useState(false);
@@ -23,18 +56,9 @@ export default function Settings() {
     return () => clearTimeout(t);
   }, [justCleared]);
 
-  const handleClearLogs = () => {
-    clearLogs();
-    setJustCleared(true);
-  };
-
   useEffect(() => {
     if (!window.api?.saveSettings) return;
-
-    window.api.saveSettings({
-      autoStart,
-      startMode,
-    });
+    window.api.saveSettings({ autoStart, startMode });
   }, [autoStart, startMode]);
 
   useEffect(() => {
@@ -42,90 +66,90 @@ export default function Settings() {
     window.api.setAutoStart(autoStart);
   }, [autoStart]);
 
+  const handleAutoStart = (value) => {
+    setAutoStart(value);
+    persistNow({ autoStart: value });
+  };
+
+  const handleStartMode = (value) => {
+    setStartMode(value);
+    persistNow({ startMode: value });
+  };
+
+  const handleTheme = (value) => {
+    setTheme(value);
+    persistNow({ theme: value });
+  };
+
+  const handleClearLogs = () => {
+    clearLogs();
+    setJustCleared(true);
+  };
+
   return (
-    <div className="h-full w-full overflow-y-auto px-6 py-5 space-y-4 bg-[#0d0b1e]/60">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-xl md:text-2xl font-semibold text-white flex items-center gap-2">
-          <SettingsIcon className="w-5 h-5 text-violet-300" />
-          Settings
-        </h1>
-      </header>
+    <Page narrow className="space-y-8">
+      <PageHeader
+        title="Settings"
+        description="Choose how the app looks and how the assistant starts, and manage this session's activity log."
+      />
 
-      {/* GENERAL */}
-      <section className="bg-[#13112b]/80 border border-[#2e2a5a] rounded-xl p-4 md:p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-white">General</h2>
+      <Section title="Appearance">
+        <Row label="Theme" description="Dark matches Cursor's look. Light uses the warm cream version.">
+          <Segmented
+            label="Theme"
+            options={[
+              { value: "dark", label: "Dark" },
+              { value: "light", label: "Light" },
+            ]}
+            value={theme === "light" ? "light" : "dark"}
+            onChange={handleTheme}
+          />
+        </Row>
+      </Section>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Auto start */}
-          <div>
-            <label className="text-xs text-violet-100">Auto-start</label>
-            <label className="flex gap-2 items-center mt-1 text-white text-xs">
-              <input
-                type="checkbox"
-                className=" w-5 h-5"
-                checked={autoStart}
-                onChange={(e) => {
-                  const value = e.target.checked;
-                  setAutoStart(value);
-
-                  // 🔑 IMMEDIATE persistence
-                  const raw = localStorage.getItem("capstone-settings");
-                  const prev = raw ? JSON.parse(raw) : {};
-                  localStorage.setItem(
-                    "capstone-settings",
-                    JSON.stringify({ ...prev, autoStart: value }),
-                  );
-                }}
-              />
-              Start assistant on launch
-            </label>
-          </div>
-        </div>
-      </section>
-
-      {/* ASSISTANT */}
-      <section className="bg-[#13112b]/80 border border-[#2e2a5a] rounded-xl p-4 md:p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-white">Assistant</h2>
-
-        {/* Start mode */}
-        <div>
-          <label className="text-xs text-violet-100">Auto-start mode</label>
-          <select
-            className="w-full mt-1 rounded-md border border-[#3d3870] bg-[#0d0b1e]/70 px-2 py-1 text-xs"
+      <Section title="Startup">
+        <Row
+          label="Start assistant on launch"
+          description="Start listening and tracking as soon as the app opens."
+          htmlFor="setting-autostart"
+        >
+          <Switch id="setting-autostart" checked={autoStart} onChange={handleAutoStart} />
+        </Row>
+        <Row
+          label="Start with"
+          description={autoStart ? "Which inputs to turn on at launch." : "Turn on “Start assistant on launch” to choose."}
+        >
+          <Segmented
+            label="Start with"
+            options={MODE_OPTIONS}
             value={startMode}
-            onChange={(e) => setStartMode(e.target.value)}
+            onChange={handleStartMode}
             disabled={!autoStart}
-          >
-            <option value="voice">Voice only</option>
-            <option value="gesture">Gesture only</option>
-            <option value="both">Voice + Gesture</option>
-          </select>
-          {!autoStart && (
-            <p className="text-[10px] text-white0 mt-1">
-              Enable auto-start to use this option
-            </p>
-          )}
-        </div>
-      </section>
+          />
+        </Row>
+      </Section>
 
-      {/* LOGS */}
-      <section className="bg-[#13112b]/80 border border-[#2e2a5a] rounded-xl p-4 md:p-5 mb-6">
-        <h2 className="text-sm font-semibold text-white">Logs</h2>
-
-        <div className="mt-2 flex items-center gap-3">
-          <button
-            onClick={handleClearLogs}
-            className="px-3 py-1 border border-red-500 text-red-300 rounded-md text-xs hover:bg-red-500/10"
-          >
-            Clear activity logs
-          </button>
-          <span className="text-[11px] text-violet-200">
-            {justCleared
-              ? "Logs cleared."
-              : `${logs.length} ${logs.length === 1 ? "entry" : "entries"} this session`}
+      <Section title="Activity log">
+        <Row
+          label="Clear activity log"
+          description="The log starts empty each time you open the app and is never saved to disk."
+        >
+          <span className="text-caption tabular-nums text-muted" aria-live="polite">
+            {justCleared ? (
+              <span className="inline-flex items-center gap-1 text-success">
+                <Check className="size-3.5" aria-hidden="true" />
+                Logs cleared
+              </span>
+            ) : (
+              `${logs.length} ${logs.length === 1 ? "entry" : "entries"} this session`
+            )}
           </span>
-        </div>
-      </section>
-    </div>
+          <Button variant="danger" onClick={handleClearLogs} disabled={!logs.length}>
+            <Trash2 aria-hidden="true" />
+            Clear log
+          </Button>
+        </Row>
+      </Section>
+    </Page>
   );
 }

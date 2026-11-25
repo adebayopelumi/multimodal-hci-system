@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   SwipeLeft,
   SwipeRight,
@@ -9,145 +8,125 @@ import {
   ScrollDown,
   Screenshot,
 } from "../components/gesture-tutorial";
+import { Card, Eyebrow, Page, PageHeader } from "../components/ui";
+
+const steps = [
+  {
+    title: "Start the assistant",
+    text: "On the Dashboard, pick Voice, Gesture or both, then press Start.",
+  },
+  {
+    title: "Say “Hey Jarvis”",
+    text: "Wait for the chime, then ask in one sentence. You can chain several steps with “and”.",
+  },
+  {
+    title: "Or use your hand",
+    text: "Keep your hand in view of the camera. The Dashboard shows each gesture it recognises.",
+  },
+];
 
 const voiceExamples = [
   {
-    title: "Open apps",
-    phrases: ["open my browser", "start Spotify", "launch Visual Studio Code"],
-    description: "Quickly open or switch to applications using natural speech.",
+    title: "Apps & websites",
+    phrases: ["open Spotify", "open YouTube", "close Safari"],
   },
   {
-    title: "Control volume",
-    phrases: ["mute the sound", "turn it down", "make it louder"],
-    description: "Adjust system volume without touching the keyboard.",
+    title: "Several steps at once",
+    phrases: ["open YouTube and play the latest MrBeast video", "open Spotify and play Wizkid"],
   },
   {
-    title: "Adjust display",
-    phrases: ["increase brightness", "make the screen dimmer"],
-    description: "Control screen brightness with simple voice commands.",
+    title: "Questions & search",
+    phrases: ["what's the tallest building in the world?", "find restaurants near me"],
   },
   {
-    title: "Navigate content",
-    phrases: ["scroll down", "go to the top", "move to the bottom"],
-    description: "Scroll through pages and documents hands-free.",
+    title: "Messages & notes",
+    phrases: ["message Mum on WhatsApp saying I'm on my way", "make a note to buy milk and eggs"],
+    note: "Messages and emails are only drafted. You press send.",
   },
   {
-    title: "Open folders",
-    phrases: ["open downloads", "show my pictures"],
-    description: "Jump directly to common system folders.",
+    title: "Your Mac",
+    phrases: ["turn the volume down", "what time is it?", "open my downloads"],
   },
 ];
 
 const gestures = [
-  { name: "Swipe Left", demo: <SwipeLeft /> },
-  { name: "Swipe Right", demo: <SwipeRight /> },
-  { name: "Move Cursor", demo: <CursorMove /> },
-  { name: "Left Click", demo: <LeftClick /> },
-  { name: "Right Click", demo: <RightClick /> },
-  { name: "Scroll Up", demo: <ScrollUp /> },
-  { name: "Scroll Down", demo: <ScrollDown /> },
+  { name: "Swipe left", demo: <SwipeLeft /> },
+  { name: "Swipe right", demo: <SwipeRight /> },
+  { name: "Move cursor", demo: <CursorMove /> },
+  { name: "Left click", demo: <LeftClick /> },
+  { name: "Right click", demo: <RightClick /> },
+  { name: "Scroll up", demo: <ScrollUp /> },
+  { name: "Scroll down", demo: <ScrollDown /> },
   { name: "Screenshot", demo: <Screenshot /> },
 ];
 
 export default function Tutorial() {
   return (
-    <div className="h-full w-full overflow-y-auto px-6 py-6 space-y-6 bg-[#0d0b1e]/70">
-      
-      {/* HEADER */}
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-white">
-          Getting Started
-        </h1>
-        <p className="text-sm text-violet-300 max-w-xl">
-          Control your computer using voice and gestures. Speak naturally,
-          move confidently, and let the assistant do the rest.
-        </p>
-      </header>
+    <Page className="space-y-12">
+      <PageHeader
+        eyebrow="Help"
+        title="Getting started"
+        description="Control your Mac with your voice and your hands. Speak naturally; you don't need exact commands."
+      />
 
-      {/* CORE CONCEPT */}
-      <section className="grid gap-4 md:grid-cols-3">
-        {[
-          {
-            title: "Speak naturally",
-            text: "Use everyday language. You don’t need to remember exact commands.",
-          },
-          {
-            title: "Use simple gestures",
-            text: "Perform clear, deliberate movements within the camera view.",
-          },
-          {
-            title: "Watch the feedback",
-            text: "The dashboard shows what the assistant understands in real time.",
-          },
-        ].map((item) => (
-          <div
-            key={item.title}
-            className="rounded-xl border border-[#2e2a5a] bg-[#13112b]/70 p-4"
-          >
-            <h3 className="text-sm font-semibold text-white">
-              {item.title}
-            </h3>
-            <p className="text-sm text-violet-300 mt-1">{item.text}</p>
-          </div>
+      {/* How it works */}
+      <ol className="grid gap-4 md:grid-cols-3">
+        {steps.map((step, i) => (
+          <li key={step.title}>
+            <Card className="h-full p-5">
+              <span className="font-mono text-caption text-muted">{String(i + 1).padStart(2, "0")}</span>
+              <h3 className="mt-3 text-title font-semibold text-ink">{step.title}</h3>
+              <p className="mt-1 text-ui text-body">{step.text}</p>
+            </Card>
+          </li>
         ))}
+      </ol>
+
+      {/* Voice */}
+      <section className="space-y-4">
+        <div>
+          <Eyebrow>Voice</Eyebrow>
+          <h2 className="mt-2 text-display-sm font-normal text-ink">Things you can say</h2>
+        </div>
+
+        <Card className="divide-y divide-hairline-soft">
+          {voiceExamples.map((group) => (
+            <div key={group.title} className="grid gap-3 px-5 py-4 md:grid-cols-[200px_1fr] md:items-baseline">
+              <h3 className="text-ui font-medium text-ink">{group.title}</h3>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {group.phrases.map((p) => (
+                    <code
+                      key={p}
+                      className="rounded-sm border border-hairline bg-canvas-soft px-2 py-1 font-mono text-[12px] text-ink"
+                    >
+                      “{p}”
+                    </code>
+                  ))}
+                </div>
+                {group.note && <p className="text-caption text-muted">{group.note}</p>}
+              </div>
+            </div>
+          ))}
+        </Card>
       </section>
 
-      {/* GESTURES */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-white">
-          Gesture controls
-        </h2>
+      {/* Gestures */}
+      <section className="space-y-4">
+        <div>
+          <Eyebrow>Gestures</Eyebrow>
+          <h2 className="mt-2 text-display-sm font-normal text-ink">Hand controls</h2>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {gestures.map((g) => (
-            <div
-              key={g.name}
-              className="rounded-xl border border-[#2e2a5a] bg-[#13112b]/70 p-3 space-y-2"
-            >
+            <Card key={g.name} className="overflow-hidden">
               {g.demo}
-              <div className="text-center text-xs font-medium text-violet-100">
-                {g.name}
-              </div>
-            </div>
+              <p className="border-t border-hairline-soft px-4 py-3 text-ui font-medium text-ink">{g.name}</p>
+            </Card>
           ))}
         </div>
       </section>
-
-      {/* VOICE */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-white">
-          Voice examples
-        </h2>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {voiceExamples.map((v) => (
-            <div
-              key={v.title}
-              className="rounded-xl border border-[#2e2a5a] bg-[#13112b]/70 p-4 space-y-2"
-            >
-              <h3 className="text-sm font-semibold text-white">
-                {v.title}
-              </h3>
-
-              <div className="flex flex-wrap gap-2">
-                {v.phrases.map((p) => (
-                  <span
-                    key={p}
-                    className="rounded-full bg-[#1e1b3a] px-3 py-1 text-xs text-violet-100"
-                  >
-                    “{p}”
-                  </span>
-                ))}
-              </div>
-
-              <p className="text-sm text-violet-300">{v.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      
-    </div>
+    </Page>
   );
 }
-
