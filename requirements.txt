@@ -7,12 +7,23 @@ pyttsx3
 numpy
 opencv-python
 requests
-pvporcupine
 rapidfuzz
 assemblyai
 openai
-rapidfuzz
-mediapipe
+
+# Gesture tracking: newer mediapipe releases drop the mp.solutions API the engine uses
+mediapipe==0.10.14
+
+# Wake word ("Hey Jarvis") detection
+openwakeword>=0.6,<0.7
+onnxruntime
+
+# Natural voice (Kokoro). Model files go in engine/voice/tts_models/, see engine/voice/tts.py
+kokoro-onnx
+sounddevice
+
+# Finds YouTube videos so "play the latest MrBeast video" can autoplay
+yt-dlp
 
 # macOS only
 pyobjc-framework-Quartz; platform_system == "Darwin"

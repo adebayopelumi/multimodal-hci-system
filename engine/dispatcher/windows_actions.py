@@ -12,6 +12,8 @@ import urllib.parse
 from typing import Dict, Any
 from datetime import datetime, timedelta
 
+from engine.dispatcher import web_actions
+
 # ------------------------------------------------------------
 # Backends:
 # 1) pywin32 (RECOMMENDED) -> real Windows cursor/click/scroll
@@ -195,6 +197,16 @@ def open_app_by_name(spoken_name: str):
         return
 
     best = find_best_matching_app(spoken_name)
+
+    # "YouTube", "Gmail", ... are websites unless a real app with that name exists.
+    site = web_actions.site_for(spoken_name)
+    if site and (
+        not best
+        or difflib.SequenceMatcher(None, spoken_name.lower(), best.lower()).ratio() < 0.85
+    ):
+        web_actions.open_url(site)
+        return
+
     if best:
         if APP_PATHS is None:
             APP_PATHS = _collect_shortcuts()
@@ -554,6 +566,33 @@ def dispatch(intent: str, text: str | None = None, params: Dict[str, Any] | None
         speak(date_as_words()); return
     if intent == "what_weather":
         webbrowser.open("https://www.google.com/search?q=weather today", new=2); return
+
+    # WEB / YOUTUBE / SPOTIFY / MAPS
+    if intent == "open_website":
+        web_actions.open_url(web_actions.normalize_url(params.get("url", ""))); return
+    if intent == "web_search":
+        query = params.get("query") or extract_search_query(text or "")
+        if query:
+            web_actions.web_search(query)
+        return
+    if intent == "maps_search":
+        web_actions.maps_search(params.get("query") or "restaurants near me"); return
+    if intent == "youtube_search":
+        web_actions.youtube_search(params.get("query") or ""); return
+    if intent == "youtube_play":
+        query = params.get("query") or ""
+        if query:
+            web_actions.youtube_play(query, latest=bool(params.get("latest")))
+        else:
+            web_actions.open_url("https://www.youtube.com")
+        return
+    if intent in ("spotify_search", "spotify_play"):
+        # Windows: open the Spotify search (playback control is macOS-only for now).
+        query = params.get("query") or ""
+        webbrowser.open("spotify:search:" + urllib.parse.quote(query) if query else "spotify:", new=2)
+        return
+    if intent in ("next_track", "previous_track"):
+        _press("nexttrack" if intent == "next_track" else "prevtrack"); return
 
     # SEARCH
     if intent in ("search", "search_google", "search_youtube"):

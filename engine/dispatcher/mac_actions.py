@@ -9,7 +9,10 @@ import datetime
 import webbrowser
 import difflib
 import urllib.parse
+import time
 from engine.voice.history import log_search
+from engine.voice import tts
+from engine.dispatcher import web_actions, mac_ui
 from typing import Dict, Any
 from datetime import datetime
 from engine.context import get_context_app
@@ -44,7 +47,7 @@ def run_osascript(script: str):
 
 
 def say(text: str):
-    subprocess.run(["say", text], check=False)
+    tts.speak(text)
 
 
 def get_frontmost_app() -> str:
@@ -112,18 +115,45 @@ def find_best_matching_app(app_name: str) -> str | None:
     return best
 
 
-def open_app_by_name(spoken_name: str):
+def _app_match_score(app_name: str, candidate: str) -> float:
+    return difflib.SequenceMatcher(
+        None, normalize_app_name(app_name), normalize_app_name(candidate)
+    ).ratio()
+
+
+def open_app_by_name(spoken_name: str, wait: bool = False) -> str | None:
+    """Open an app (or known website). Returns the matched app name, if any."""
     if not spoken_name:
         say("I didn't catch which app to open.")
         return
     print(f"[Dispatcher] Looking for app like: {spoken_name!r}")
     best = find_best_matching_app(spoken_name)
+
+    # "YouTube", "Gmail", ... are websites unless a real app with that name exists.
+    site = web_actions.site_for(spoken_name)
+    if site and (not best or _app_match_score(spoken_name, best) < 0.85):
+        web_actions.open_url(site)
+        return None
+
     if best:
         print(f"[Dispatcher] Opening app: {best}")
-        run_osascript(f'tell application "{best}" to activate')
-    else:
-        print(f"[Dispatcher] No matching app found for: {spoken_name!r}")
-        say(f"I couldn't find the app {spoken_name}.")
+        if wait:
+            mac_ui.focus_app(best)  # launches and waits until it's ready for keystrokes
+        else:
+            # `open -a` launches/focuses without needing Automation permission.
+            subprocess.run(["open", "-a", best], check=False)
+        return best
+
+    print(f"[Dispatcher] No matching app found for: {spoken_name!r}")
+    say(f"I couldn't find the app {spoken_name}.")
+    return None
+
+
+def resolve_installed_app(spoken_name: str | None) -> str | None:
+    """Map a spoken app name to an installed app name ("VS Code" -> "Visual Studio Code")."""
+    if not spoken_name:
+        return None
+    return find_best_matching_app(spoken_name) or spoken_name
 
 
 def close_app_by_name(spoken_name: str):
@@ -224,8 +254,81 @@ def human_date_str(dt: datetime | None = None) -> str:
     return dt.strftime("%A, %B %d, %Y")
 
 def speak(text: str, voice: str = DEFAULT_VOICE, rate: str = DEFAULT_RATE):
-    # -v voice, -r rate
-    subprocess.Popen(["say", "-v", voice, "-r", rate, text])
+    # Natural Kokoro voice (falls back to macOS `say` inside tts if unavailable).
+    tts.speak(text)
+
+
+#  Spotify (desktop app via AppleScript)
+
+SPOTIFY_RANDOM_URI = os.environ.get(
+    "MHCI_SPOTIFY_RANDOM_URI", "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"  # Today's Top Hits
+)
+_spotify_hint_given = False
+
+
+def _spotify_osascript(body: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["osascript", "-e", f'tell application "Spotify"\n{body}\nend tell'],
+        capture_output=True, text=True, check=False,
+    )
+
+
+def _spotify_ready(timeout: float = 10.0) -> bool:
+    """Launch Spotify if needed and wait until it accepts commands."""
+    running = subprocess.run(["pgrep", "-x", "Spotify"], capture_output=True).returncode == 0
+    if not running:
+        subprocess.run(["open", "-a", "Spotify"], check=False)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = _spotify_osascript("return player state as string")
+        if r.returncode == 0 and r.stdout.strip():
+            if not running:
+                time.sleep(1.0)  # freshly launched: let it finish loading the player
+            return True
+        time.sleep(0.4)
+    print("[Spotify] Spotify didn't become ready in time.")
+    return False
+
+
+def spotify_play_uri(uri: str, shuffle: bool | None = None) -> bool:
+    if not _spotify_ready():
+        return False
+    body = ""
+    if shuffle is not None:
+        body += f"set shuffling to {'true' if shuffle else 'false'}\n"
+    body += f'play track "{uri}"'
+    r = _spotify_osascript(body)
+    if r.returncode != 0:
+        print(f"[Spotify] play failed: {r.stderr.strip()}")
+        return False
+    return True
+
+
+def spotify_search(query: str):
+    subprocess.run(["open", "spotify:search:" + urllib.parse.quote(query)], check=False)
+
+
+def spotify_play(query: str | None, kind: str | None):
+    global _spotify_hint_given
+    kind = (kind or "").lower()
+
+    if kind == "random" or not query:
+        spotify_play_uri(SPOTIFY_RANDOM_URI, shuffle=True)
+        return
+
+    if web_actions.spotify_api_available():
+        found = web_actions.spotify_find_uri(query, kind or "track")
+        if found:
+            uri, name = found
+            print(f"[Spotify] Playing {name!r} ({uri})")
+            spotify_play_uri(uri, shuffle=(kind in ("artist", "playlist", "album")) or None)
+            return
+
+    # Without Spotify API keys there's no way to look up the exact song, so show the search.
+    spotify_search(query)
+    if not _spotify_hint_given:
+        _spotify_hint_given = True
+        say(f"I opened {query} in Spotify search. Add a Spotify API key so I can press play for you.")
 
 def time_as_words(dt: datetime | None = None) -> str:
     dt = dt or datetime.now()
@@ -636,7 +739,7 @@ def dispatch(intent: str, text: str | None = None, params: Dict[str, Any] | None
         if not app: return
 
         if app in ("Spotify", "Music"):
-            run_osascript(f'tell application "{app}" to next track'); return
+            run_osascript(f'tell application "{app}" to previous track'); return
         if app == "wpsoffice":
             focus_app(app)
             run_osascript('tell application "System Events" to key code 123'); return
@@ -689,6 +792,13 @@ def dispatch(intent: str, text: str | None = None, params: Dict[str, Any] | None
             run_osascript(
                 'tell application "System Events" to key code 49'
             )
+
+    elif intent in ("next_track", "previous_track"):
+        app = get_frontmost_app()
+        if app not in ("Music", "Spotify"):
+            app = "Spotify"
+        verb = "next" if intent == "next_track" else "previous"
+        run_osascript(f'tell application "{app}" to {verb} track')
 
     #  SCREENSHOT
     elif intent == "capture_screen":
@@ -754,7 +864,8 @@ def dispatch(intent: str, text: str | None = None, params: Dict[str, Any] | None
         app_name = params.get("app_name")
         if not app_name and text:
             app_name = text
-        open_app_by_name(app_name)
+        # wait=True when more actions follow, so e.g. keystrokes land in the new app
+        open_app_by_name(app_name, wait=bool(params.get("_wait")))
 
     elif intent == "close_app_generic":
         app_name = params.get("app_name")
@@ -777,6 +888,96 @@ def dispatch(intent: str, text: str | None = None, params: Dict[str, Any] | None
 
     elif intent == "what_weather":
         webbrowser.open("https://www.google.com/search?q=weather today", new=2)
+
+    #  WEB / YOUTUBE / SPOTIFY / MAPS
+    elif intent == "open_website":
+        web_actions.open_url(web_actions.normalize_url(params.get("url", "")), params.get("browser"))
+
+    elif intent == "web_search":
+        query = params.get("query") or extract_search_query(text or "")
+        if query:
+            log_search(query, raw_text=text)
+            web_actions.web_search(query, params.get("browser"))
+
+    elif intent == "maps_search":
+        web_actions.maps_search(params.get("query") or "restaurants near me")
+
+    elif intent == "youtube_search":
+        query = params.get("query") or ""
+        if query:
+            log_search(query, app_name="YouTube", raw_text=text)
+            web_actions.youtube_search(query)
+        else:
+            web_actions.open_url("https://www.youtube.com")
+
+    elif intent == "youtube_play":
+        query = params.get("query") or ""
+        if not query:
+            web_actions.open_url("https://www.youtube.com")
+        elif not web_actions.youtube_play(query, latest=bool(params.get("latest"))):
+            say(f"I couldn't find that exact video, so here are the results for {query}.")
+
+    elif intent == "spotify_search":
+        query = params.get("query") or ""
+        if query:
+            spotify_search(query)
+        else:
+            subprocess.run(["open", "-a", "Spotify"], check=False)
+
+    elif intent == "spotify_play":
+        spotify_play(params.get("query"), params.get("kind"))
+
+    elif intent == "music_play":
+        query = params.get("query") or ""
+        if not query:
+            run_osascript('tell application "Music" to play')
+        elif not mac_ui.music_play(query):
+            say(f"{query} isn't in your library, so I opened it in Apple Music.")
+
+    #  GENERIC APP AUTOMATION (works with most apps)
+    elif intent == "app_search":
+        app = resolve_installed_app(params.get("app_name")) or get_frontmost_app()
+        query = params.get("query") or ""
+        if app and normalize_app_name(app) == "spotify" and query:
+            spotify_search(query)  # Spotify's URI search is more reliable than its UI
+        elif app and query:
+            submit = params.get("submit")
+            mac_ui.app_search(app, query, shortcut=params.get("shortcut"),
+                              submit=True if submit is None else bool(submit))
+
+    elif intent == "press_keys":
+        if params.get("app_name"):
+            mac_ui.focus_app(resolve_installed_app(params["app_name"]))
+        mac_ui.press_keys(params.get("keys") or "")
+
+    elif intent == "type_text":
+        if params.get("app_name"):
+            mac_ui.focus_app(resolve_installed_app(params["app_name"]))
+        mac_ui.type_text(str(params.get("text") or ""))
+
+    elif intent == "click_menu":
+        app = resolve_installed_app(params.get("app_name"))
+        if not mac_ui.click_menu(params.get("menu", ""), params.get("item", ""), app):
+            say(f"I couldn't find {params.get('item', 'that')} in the {params.get('menu', '')} menu.")
+
+    elif intent == "wait":
+        time.sleep(min(float(params.get("seconds") or 1), 10))
+
+    elif intent == "notes_create":
+        mac_ui.notes_create(params.get("body") or text or "", params.get("title"))
+
+    elif intent == "reminder_create":
+        mac_ui.reminder_create(params.get("text") or text or "")
+
+    elif intent == "email_compose":
+        mac_ui.email_compose(params.get("to", ""), params.get("subject", ""), params.get("body", ""))
+
+    elif intent == "open_folder":
+        mac_ui.open_folder(params.get("path") or "~")
+
+    elif intent == "run_shortcut":
+        if not mac_ui.run_shortcut(params.get("name", "")):
+            say(f"I couldn't run the shortcut {params.get('name', '')}.")
 
     #  GENERIC SEARCH
     elif intent in ("search", "search_google", "search_youtube"):

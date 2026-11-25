@@ -26,5 +26,11 @@ electron/icon_1024.png
 # Runtime data
 voice_history.jsonl
 
+# Downloaded voice model (~340 MB)
+engine/voice/tts_models/
+
+# Personal words for speech recognition (may contain contact names)
+engine/voice/custom_vocab.txt
+
 # Misc
 *.log
